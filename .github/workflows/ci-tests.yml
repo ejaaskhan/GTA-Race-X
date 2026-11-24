@@ -22,29 +22,31 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
+      - name: Configure pre-installed Android SDK & accept licenses
         shell: bash
-        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+        run: |
+          ANDROID_SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=${ANDROID_SDK_DIR}" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_DIR}" >> "$GITHUB_ENV"
+          echo "${ANDROID_SDK_DIR}/platform-tools" >> "$GITHUB_PATH"
+          SDKMANAGER="$(find "${ANDROID_SDK_DIR}/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | head -n 1 || true)"
+          if [ -n "$SDKMANAGER" ]; then
+            echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          fi
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: wrapper
-
-      - name: Ensure Gradle wrapper is executable
-        shell: bash
-        run: chmod +x ./gradlew
+          gradle-version: "9.3.1"
 
       - name: Restore debug keystore
         shell: bash
@@ -67,11 +69,11 @@ jobs:
 
       - name: Compile debug Kotlin & run unit/Robolectric tests
         shell: bash
-        run: ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest --stacktrace
+        run: gradle :app:compileDebugKotlin :app:testDebugUnitTest --stacktrace
 
       - name: Upload test report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pr-unit-test-report
           path: app/build/reports/tests/testDebugUnitTest/
