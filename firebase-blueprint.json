@@ -1,0 +1,243 @@
+{
+  "entities": {
+    "PlayerProfile": {
+      "title": "PlayerProfile",
+      "description": "Authenticated player profile, currency balance, XP/Level progression, achievements, selected vehicle, and career telemetry.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Driver callsign or Google display name (1-50 chars)."
+        },
+        "credits": {
+          "type": "integer",
+          "description": "In-game racing cash earned from races, achievements, and drift sessions."
+        },
+        "xp": {
+          "type": "integer",
+          "description": "Cumulative driver experience points."
+        },
+        "level": {
+          "type": "integer",
+          "description": "Current player level derived from XP (1-50)."
+        },
+        "racesCompleted": {
+          "type": "integer",
+          "description": "Total completed races and challenges."
+        },
+        "racesWon": {
+          "type": "integer",
+          "description": "Total 1st-place / gold victories."
+        },
+        "unlockedAchievements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of unlocked achievement IDs."
+        },
+        "selectedCarId": {
+          "type": "string",
+          "enum": ["vipera_gtx", "apex_kuro", "titan_v8", "solstice_v10", "spectre_rs"],
+          "description": "Currently active vehicle ID in the garage and city."
+        },
+        "totalDistanceKm": {
+          "type": "number",
+          "description": "Cumulative kilometers driven in the open world."
+        },
+        "highestDriftCombo": {
+          "type": "integer",
+          "description": "Highest single drift combo score achieved."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() at creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on each update."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "credits",
+        "selectedCarId",
+        "totalDistanceKm",
+        "highestDriftCombo",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GarageCar": {
+      "title": "GarageCar",
+      "description": "An owned vehicle with 6 visual customization systems and 6 mechanical upgrade tracks.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "carId": {
+          "type": "string",
+          "enum": ["vipera_gtx", "apex_kuro", "titan_v8", "solstice_v10", "spectre_rs"],
+          "description": "Vehicle catalog identifier matching the document ID."
+        },
+        "paintHex": {
+          "type": "string",
+          "description": "Hex color for metallic chassis paint (e.g. #E50914)."
+        },
+        "rimStyle": {
+          "type": "string",
+          "enum": ["CHROME", "CARBON", "GOLD", "CRIMSON", "BRONZE"],
+          "description": "Wheel rim finish preset."
+        },
+        "underglowHex": {
+          "type": "string",
+          "description": "Hex color for neon underglow or NONE."
+        },
+        "spoilerStyle": {
+          "type": "string",
+          "enum": ["STOCK", "LIP", "GT_WING", "HYPER_AERO"],
+          "description": "Rear aerodynamic spoiler mesh preset."
+        },
+        "bodyKitStyle": {
+          "type": "string",
+          "enum": ["STREET", "WIDEBODY", "TRACK_CARBON", "APEX_PRO"],
+          "description": "3D body kit aerodynamic attachment package."
+        },
+        "windowTint": {
+          "type": "string",
+          "enum": ["CLEAR", "SMOKE", "MIDNIGHT", "MIRROR_CYAN"],
+          "description": "Cockpit greenhouse window tint level."
+        },
+        "headlightStyle": {
+          "type": "string",
+          "enum": ["XENON_WHITE", "ICE_BLUE", "SOLAR_AMBER", "CRIMSON_RED", "NEON_VIOLET"],
+          "description": "Headlight emissive color style."
+        },
+        "engineLevel": {
+          "type": "integer",
+          "description": "Engine tuning tier (1-5)."
+        },
+        "turboLevel": {
+          "type": "integer",
+          "description": "Turbo boost tuning tier (1-5)."
+        },
+        "nitroLevel": {
+          "type": "integer",
+          "description": "Nitro boost & capacity tier (1-5)."
+        },
+        "handlingLevel": {
+          "type": "integer",
+          "description": "Legacy handling / tires grip tier (1-5)."
+        },
+        "tiresLevel": {
+          "type": "integer",
+          "description": "Tire compound grip tier (1-5)."
+        },
+        "suspensionLevel": {
+          "type": "integer",
+          "description": "Coilover suspension stability tier (1-5)."
+        },
+        "brakesLevel": {
+          "type": "integer",
+          "description": "Hydraulic braking tier (1-5)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() at unlock."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on customization."
+        }
+      },
+      "required": [
+        "userId",
+        "carId",
+        "paintHex",
+        "rimStyle",
+        "underglowHex",
+        "engineLevel",
+        "nitroLevel",
+        "handlingLevel",
+        "brakesLevel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CareerProgress": {
+      "title": "CareerProgress",
+      "description": "Personal best record and medal standing for a specific Career street event.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "eventId": {
+          "type": "string",
+          "description": "Career event identifier matching the document ID."
+        },
+        "bestTimeMs": {
+          "type": "integer",
+          "description": "Best completion time in milliseconds (0 if not yet timed)."
+        },
+        "bestDriftScore": {
+          "type": "integer",
+          "description": "Highest drift score recorded for this event."
+        },
+        "medalTier": {
+          "type": "string",
+          "enum": ["NONE", "BRONZE", "SILVER", "GOLD"],
+          "description": "Highest medal achieved."
+        },
+        "completedCount": {
+          "type": "integer",
+          "description": "Number of completed runs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on first completion."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on record update."
+        }
+      },
+      "required": [
+        "userId",
+        "eventId",
+        "bestTimeMs",
+        "bestDriftScore",
+        "medalTier",
+        "completedCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/PlayerProfile" },
+      "description": "Root player profile, XP/Levels, achievements, and progression stats scoped to authenticated user."
+    },
+    "/users/{userId}/garageCars/{carId}": {
+      "schema": { "$ref": "#/entities/GarageCar" },
+      "description": "Owned vehicles, 6 visual customizations, and 6 upgrade tracks scoped to authenticated user."
+    },
+    "/users/{userId}/careerProgress/{eventId}": {
+      "schema": { "$ref": "#/entities/CareerProgress" },
+      "description": "Career race, time trial, and drift event records scoped to authenticated user."
+    }
+  }
+}

@@ -1,0 +1,236 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidCarId(carId) {
+      return carId in ['vipera_gtx', 'apex_kuro', 'titan_v8', 'solstice_v10', 'spectre_rs'];
+    }
+
+    function isValidRimStyle(style) {
+      return style in ['CHROME', 'CARBON', 'GOLD', 'CRIMSON', 'BRONZE'];
+    }
+
+    function isValidSpoilerStyle(style) {
+      return style in ['STOCK', 'LIP', 'GT_WING', 'HYPER_AERO'];
+    }
+
+    function isValidBodyKitStyle(style) {
+      return style in ['STREET', 'WIDEBODY', 'TRACK_CARBON', 'APEX_PRO'];
+    }
+
+    function isValidWindowTint(tint) {
+      return tint in ['CLEAR', 'SMOKE', 'MIDNIGHT', 'MIRROR_CYAN'];
+    }
+
+    function isValidHeadlightStyle(style) {
+      return style in ['XENON_WHITE', 'ICE_BLUE', 'SOLAR_AMBER', 'CRIMSON_RED', 'NEON_VIOLET'];
+    }
+
+    function isValidMedalTier(tier) {
+      return tier in ['NONE', 'BRONZE', 'SILVER', 'GOLD'];
+    }
+
+    function isValidHexOrNone(val) {
+      return val is string && (val == 'NONE' || (val.size() >= 7 && val.size() <= 9 && val.matches('^#[0-9A-Fa-f]{6,8}$')));
+    }
+
+    function isValidHex(val) {
+      return val is string && val.size() >= 7 && val.size() <= 9 && val.matches('^#[0-9A-Fa-f]{6,8}$');
+    }
+
+    function isValidUpgradeLevel(level) {
+      return level is int && level >= 1 && level <= 5;
+    }
+
+    function isValidAchievementList(arr) {
+      return arr is list && arr.size() <= 32;
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+    function isValidPlayerProfile(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'displayName', 'credits', 'selectedCarId',
+               'totalDistanceKm', 'highestDriftCombo', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'displayName', 'credits', 'xp', 'level',
+               'racesCompleted', 'racesWon', 'unlockedAchievements',
+               'selectedCarId', 'totalDistanceKm', 'highestDriftCombo',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+             data.credits is int && data.credits >= 0 && data.credits <= 100000000 &&
+             (!('xp' in data) || (data.xp is int && data.xp >= 0 && data.xp <= 100000000)) &&
+             (!('level' in data) || (data.level is int && data.level >= 1 && data.level <= 50)) &&
+             (!('racesCompleted' in data) || (data.racesCompleted is int && data.racesCompleted >= 0 && data.racesCompleted <= 1000000)) &&
+             (!('racesWon' in data) || (data.racesWon is int && data.racesWon >= 0 && data.racesWon <= 1000000)) &&
+             (!('unlockedAchievements' in data) || isValidAchievementList(data.unlockedAchievements)) &&
+             data.selectedCarId is string && isValidCarId(data.selectedCarId) &&
+             data.totalDistanceKm is number && data.totalDistanceKm >= 0 && data.totalDistanceKm <= 1000000 &&
+             data.highestDriftCombo is int && data.highestDriftCombo >= 0 && data.highestDriftCombo <= 10000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidGarageCar(data, userId, carId) {
+      return data.keys().hasAll([
+               'userId', 'carId', 'paintHex', 'rimStyle', 'underglowHex',
+               'engineLevel', 'nitroLevel', 'handlingLevel', 'brakesLevel',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'carId', 'paintHex', 'rimStyle', 'underglowHex',
+               'spoilerStyle', 'bodyKitStyle', 'windowTint', 'headlightStyle',
+               'engineLevel', 'turboLevel', 'nitroLevel', 'handlingLevel',
+               'tiresLevel', 'suspensionLevel', 'brakesLevel',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.carId is string && data.carId == carId && isValidCarId(data.carId) &&
+             isValidHex(data.paintHex) &&
+             data.rimStyle is string && isValidRimStyle(data.rimStyle) &&
+             isValidHexOrNone(data.underglowHex) &&
+             (!('spoilerStyle' in data) || (data.spoilerStyle is string && isValidSpoilerStyle(data.spoilerStyle))) &&
+             (!('bodyKitStyle' in data) || (data.bodyKitStyle is string && isValidBodyKitStyle(data.bodyKitStyle))) &&
+             (!('windowTint' in data) || (data.windowTint is string && isValidWindowTint(data.windowTint))) &&
+             (!('headlightStyle' in data) || (data.headlightStyle is string && isValidHeadlightStyle(data.headlightStyle))) &&
+             isValidUpgradeLevel(data.engineLevel) &&
+             (!('turboLevel' in data) || isValidUpgradeLevel(data.turboLevel)) &&
+             isValidUpgradeLevel(data.nitroLevel) &&
+             isValidUpgradeLevel(data.handlingLevel) &&
+             (!('tiresLevel' in data) || isValidUpgradeLevel(data.tiresLevel)) &&
+             (!('suspensionLevel' in data) || isValidUpgradeLevel(data.suspensionLevel)) &&
+             isValidUpgradeLevel(data.brakesLevel) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCareerProgress(data, userId, eventId) {
+      return data.keys().hasAll([
+               'userId', 'eventId', 'bestTimeMs', 'bestDriftScore',
+               'medalTier', 'completedCount', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'eventId', 'bestTimeMs', 'bestDriftScore',
+               'medalTier', 'completedCount', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.eventId is string && data.eventId == eventId && data.eventId.size() >= 1 && data.eventId.size() <= 64 &&
+             data.bestTimeMs is int && data.bestTimeMs >= 0 && data.bestTimeMs <= 3600000 &&
+             data.bestDriftScore is int && data.bestDriftScore >= 0 && data.bestDriftScore <= 10000000 &&
+             data.medalTier is string && isValidMedalTier(data.medalTier) &&
+             data.completedCount is int && data.completedCount >= 0 && data.completedCount <= 100000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- USER PROFILE & NESTED GARAGE / CAREER ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidPlayerProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidPlayerProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'credits', 'xp', 'level',
+                         'racesCompleted', 'racesWon', 'unlockedAchievements',
+                         'selectedCarId', 'totalDistanceKm', 'highestDriftCombo',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /garageCars/{carId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(carId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(carId) &&
+                         isValidCarId(carId) &&
+                         isValidGarageCar(incoming(), userId, carId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(carId) &&
+                         isValidGarageCar(incoming(), userId, carId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().carId == existing().carId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           // Action: Visual customization (paint, wheels, underglow, spoiler, body kit, window tint, headlights)
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'paintHex', 'rimStyle', 'underglowHex',
+                             'spoilerStyle', 'bodyKitStyle', 'windowTint', 'headlightStyle',
+                             'updatedAt'
+                           ]) ||
+                           // Action: Performance upgrade (engine, turbo, brakes, tires, suspension, nitro)
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'engineLevel', 'turboLevel', 'nitroLevel',
+                             'handlingLevel', 'tiresLevel', 'suspensionLevel', 'brakesLevel',
+                             'updatedAt'
+                           ])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(carId);
+      }
+
+      match /careerProgress/{eventId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(eventId);
+        allow list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(eventId) &&
+                         isValidCareerProgress(incoming(), userId, eventId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(eventId) &&
+                         isValidCareerProgress(incoming(), userId, eventId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().eventId == existing().eventId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'bestTimeMs', 'bestDriftScore', 'medalTier', 'completedCount', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(eventId);
+      }
+    }
+  }
+}

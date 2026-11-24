@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">GTA Race X</string>
+    <string name="brand_tagline">DRIVE BEYOND LIMITS.</string>
+    <string name="splash_loading_label">INITIALIZING 3D ENGINE &amp; SYNTHWAVE AUDIO</string>
+    <string name="splash_skip_hint">TAP TO LAUNCH</string>
+    <string name="sign_in_google">SIGN IN WITH GOOGLE</string>
+    <string name="sign_in_subtitle">Sync your custom hypercars, tuning upgrades, and midnight career medals across devices.</string>
+    <string name="menu_play">PLAY</string>
+    <string name="menu_garage">GARAGE</string>
+    <string name="menu_career">CAREER</string>
+    <string name="menu_settings">SETTINGS</string>
+    <string name="mode_free_roam">FREE ROAM</string>
+    <string name="mode_checkpoint_race">CHECKPOINT RACE</string>
+    <string name="mode_time_trial">TIME TRIAL</string>
+    <string name="mode_drift">DRIFT CHALLENGE</string>
+    <string name="hud_gas">GAS</string>
+    <string name="hud_brake">BRAKE</string>
+    <string name="hud_drift">H-BRAKE</string>
+    <string name="hud_nitro">NITRO</string>
+    <string name="hud_pause">PAUSED</string>
+    <string name="hud_resume">RESUME</string>
+    <string name="hud_restart">RESTART</string>
+    <string name="hud_main_menu">MAIN MENU</string>
+    <string name="garage_drag_hint">DRAG TO ORBIT 360°</string>
+    <string name="settings_sign_out">SIGN OUT</string>
+    <string name="settings_music_title">SYNTHWAVE SOUNDTRACK</string>
+    <string name="settings_music_desc">Dynamic 120 BPM midnight synthwave music</string>
+    <string name="settings_sfx_title">ENGINE, DRIFT &amp; UI SFX</string>
+    <string name="settings_sfx_desc">V10 RPM, turbo, brakes, screech, nitro &amp; impacts</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "GTA Race X",
+  "description": "3D open-world midnight street racing game for Android featuring a neon metropolis, highways, bridges, tunnels, customizable sports cars, and cloud-synced career progression.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
