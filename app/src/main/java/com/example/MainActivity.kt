@@ -61,6 +61,7 @@ import com.example.ui.theme.NitroCyan
 import com.example.ui.theme.RacingCrimson
 import com.example.ui.theme.TextPrimary
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.delay
@@ -98,34 +99,49 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun GtaRaceXApp() {
-    var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
+    val context = LocalContext.current
+    val firebaseConfigured = remember(context) { FirebaseApp.getApps(context).isNotEmpty() }
+    var currentUser by remember(firebaseConfigured) {
+        mutableStateOf(if (firebaseConfigured) Firebase.auth.currentUser else null)
+    }
     var showSplash by remember { mutableStateOf(true) }
     var flyInToken by remember { mutableStateOf(0) }
 
-    DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { auth ->
-            currentUser = auth.currentUser
+    if (firebaseConfigured) {
+        DisposableEffect(Unit) {
+            val listener = FirebaseAuth.AuthStateListener { auth ->
+                currentUser = auth.currentUser
+            }
+            Firebase.auth.addAuthStateListener(listener)
+            onDispose { Firebase.auth.removeAuthStateListener(listener) }
         }
-        Firebase.auth.addAuthStateListener(listener)
-        onDispose { Firebase.auth.removeAuthStateListener(listener) }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val user = currentUser
-        if (user == null) {
-            AuthScreen(
-                onAuthSuccess = {
-                    currentUser = Firebase.auth.currentUser
-                    flyInToken++
-                }
+        if (!firebaseConfigured) {
+            AuthenticatedGameHost(
+                uid = "local_driver",
+                flyInToken = flyInToken,
+                firebaseConfigured = false
             )
         } else {
-            val uid = user.uid
-            key(uid) {
-                AuthenticatedGameHost(
-                    uid = uid,
-                    flyInToken = flyInToken
+            val user = currentUser
+            if (user == null) {
+                AuthScreen(
+                    onAuthSuccess = {
+                        currentUser = Firebase.auth.currentUser
+                        flyInToken++
+                    }
                 )
+            } else {
+                val uid = user.uid
+                key(uid) {
+                    AuthenticatedGameHost(
+                        uid = uid,
+                        flyInToken = flyInToken,
+                        firebaseConfigured = true
+                    )
+                }
             }
         }
 
@@ -149,7 +165,8 @@ private fun GtaRaceXApp() {
 @Composable
 private fun AuthenticatedGameHost(
     uid: String,
-    flyInToken: Int
+    flyInToken: Int,
+    firebaseConfigured: Boolean
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -265,8 +282,10 @@ private fun AuthenticatedGameHost(
                     onSetSfx = viewModel::setSfxEnabled,
                     onSetShowFps = viewModel::setShowFpsCounter,
                     onSignOut = {
-                        viewModel.audioSynthesizer.stop()
-                        performSignOut(credentialManager, scope)
+                        if (firebaseConfigured) {
+                            viewModel.audioSynthesizer.stop()
+                            performSignOut(credentialManager, scope)
+                        }
                     }
                 )
             }

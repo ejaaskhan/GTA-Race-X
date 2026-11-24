@@ -35,6 +35,7 @@ import com.example.data.WindowTint
 import com.example.engine.ControlInput
 import com.example.engine.GameRenderer
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -85,7 +87,7 @@ private fun defaultCarBuild(): ActiveCarBuild {
 class GameViewModel(
     private val uid: String,
     private val localRepository: LocalProgressRepository,
-    private val cloudRepository: CloudProgressRepository,
+    private val cloudRepository: CloudProgressRepository?,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
@@ -119,7 +121,7 @@ class GameViewModel(
     private val localSnapshotFlow = localRepository.observeSnapshot(uid)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    private val cloudProfileFlow = cloudRepository.observeProfile(uid)
+    private val cloudProfileFlow = (cloudRepository?.observeProfile(uid) ?: flowOf(null))
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
                 .filterIsInstance<FirebaseFirestoreException>()
@@ -130,7 +132,7 @@ class GameViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
-    private val cloudGarageFlow = cloudRepository.observeGarageCars(uid)
+    private val cloudGarageFlow = (cloudRepository?.observeGarageCars(uid) ?: flowOf(emptyList()))
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
                 .filterIsInstance<FirebaseFirestoreException>()
@@ -141,7 +143,7 @@ class GameViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
-    private val cloudCareerFlow = cloudRepository.observeCareerProgress(uid)
+    private val cloudCareerFlow = (cloudRepository?.observeCareerProgress(uid) ?: flowOf(emptyList()))
         .catch { error ->
             val firestoreError = generateSequence(error) { it.cause }
                 .filterIsInstance<FirebaseFirestoreException>()
@@ -269,10 +271,14 @@ class GameViewModel(
     init {
         audioSynthesizer.start()
         viewModelScope.launch {
-            val displayName = Firebase.auth.currentUser?.displayName?.trim().orEmpty().ifBlank { "Street Racer" }
+            val displayName = if (cloudRepository != null) {
+                runCatching { Firebase.auth.currentUser?.displayName?.trim().orEmpty() }.getOrDefault("")
+            } else {
+                ""
+            }.ifBlank { "Street Racer" }
             localRepository.ensureInitialized(uid, displayName)
-            val initResult = cloudRepository.ensurePlayerInitialized()
-            if (initResult.isFailure) {
+            val initResult = cloudRepository?.ensurePlayerInitialized()
+            if (initResult != null && initResult.isFailure) {
                 _cloudSyncError.value = "Local save active • Cloud sync pending"
             }
         }
@@ -379,7 +385,7 @@ class GameViewModel(
         viewModelScope.launch {
             localRepository.saveSnapshot(uid, snapshot)
             showBanner("EQUIPPED ${GameCatalog.carById(carId).name}")
-            cloudRepository.selectCar(carId)
+            cloudRepository?.selectCar(carId)
         }
     }
 
@@ -428,7 +434,7 @@ class GameViewModel(
             val achSuffix = if (newAchs.isNotEmpty()) " • +${newAchs.size} ACHIEVEMENT!" else ""
             val unlockVerb = if (levelUnlocked) "CLAIMED" else "PURCHASED"
             showBanner("$unlockVerb ${spec.name}!$achSuffix")
-            cloudRepository.unlockAndSelectCar(
+            cloudRepository?.unlockAndSelectCar(
                 spec = spec,
                 newCredits = finalProfile.credits,
                 newXp = finalProfile.xp,
@@ -469,7 +475,7 @@ class GameViewModel(
             if (newAchs.isNotEmpty()) {
                 showBanner("ACHIEVEMENT UNLOCKED: ${newAchs.first().title}!")
             }
-            cloudRepository.updateCarVisuals(
+            cloudRepository?.updateCarVisuals(
                 carId = carId,
                 paintHex = updatedCar.paintHex,
                 rimStyle = RimStyle.fromRaw(updatedCar.rimStyle),
@@ -536,7 +542,7 @@ class GameViewModel(
             localRepository.saveSnapshot(uid, LocalProgressSnapshot(finalProfile, updatedCars, state.careerProgress))
             val achNote = if (newAchs.isNotEmpty()) " • ${newAchs.first().title}!" else ""
             showBanner("${statType.uppercase()} LVL ${currentLevel + 1}$achNote")
-            cloudRepository.upgradeCar(
+            cloudRepository?.upgradeCar(
                 carId = carId,
                 engineLevel = eng,
                 turboLevel = trb,
@@ -677,8 +683,8 @@ class GameViewModel(
 
         viewModelScope.launch {
             localRepository.saveSnapshot(uid, LocalProgressSnapshot(finalProfile, state.garageCars, updatedCareer))
-            val res = cloudRepository.recordSessionResult(enrichedResult, finalProfile, existingEvent)
-            if (res.isFailure) {
+            val res = cloudRepository?.recordSessionResult(enrichedResult, finalProfile, existingEvent)
+            if (res != null && res.isFailure) {
                 _cloudSyncError.value = "Progress saved locally • Cloud sync retry pending"
             }
         }
@@ -705,10 +711,15 @@ class GameViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val appContext = context.applicationContext
+            val cloudRepo = if (FirebaseApp.getApps(appContext).isNotEmpty()) {
+                runCatching { CloudProgressRepository(appContext) }.getOrNull()
+            } else {
+                null
+            }
             return GameViewModel(
                 uid = uid,
                 localRepository = LocalProgressRepository(appContext),
-                cloudRepository = CloudProgressRepository(appContext),
+                cloudRepository = cloudRepo,
                 settingsRepository = SettingsRepository(appContext)
             ) as T
         }
