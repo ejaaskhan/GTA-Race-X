@@ -1,0 +1,185 @@
+name: Android APK & AAB Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run unit & Robolectric tests before packaging APK & AAB"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    name: Build GTA Race X APK & AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Ensure Gradle wrapper is executable
+        shell: bash
+        run: chmod +x ./gradlew
+
+      - name: Restore debug keystore for Debug APK & AAB signing
+        shell: bash
+        run: |
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            echo "Restored debug.keystore from debug.keystore.base64"
+          elif [ ! -f "debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "Generated fallback debug.keystore"
+          fi
+
+      - name: Optional Firebase google-services.json secret injection
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+            echo "Injected app/google-services.json from GitHub Secret"
+          elif [ -f "app/google-services.json" ]; then
+            echo "Using repository app/google-services.json"
+          else
+            echo "::notice::app/google-services.json not found; building with Google Services passthrough."
+          fi
+
+      - name: Run unit & Robolectric tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests != false }}
+        shell: bash
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Build Debug APK & Debug AAB
+        shell: bash
+        run: |
+          ./gradlew :app:assembleDebug :app:bundleDebug --stacktrace
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/GTA-Race-X-debug.apk
+          cp app/build/outputs/bundle/debug/app-debug.aab dist/GTA-Race-X-debug.aab
+          ls -lh dist/GTA-Race-X-debug.apk dist/GTA-Race-X-debug.aab
+
+      - name: Check Release signing secrets
+        id: release_check
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets detected — signed Release APK & AAB will be built."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release signing secrets (RELEASE_KEYSTORE_BASE64, STORE_PASSWORD, KEY_PASSWORD) are not set. Skipping Release build and publishing Debug APK & AAB."
+          fi
+
+      - name: Build signed Release APK & Release AAB
+        if: steps.release_check.outputs.configured == 'true'
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="${RUNNER_TEMP}/my-upload-key.jks"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
+          export KEYSTORE_PATH="$KEYSTORE_FILE"
+          ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/GTA-Race-X-release.apk
+          cp app/build/outputs/bundle/release/app-release.aab dist/GTA-Race-X-release.aab
+          ls -lh dist/GTA-Race-X-release.apk dist/GTA-Race-X-release.aab
+
+      - name: Clean up temporary signing files
+        if: always()
+        shell: bash
+        run: rm -f "${RUNNER_TEMP}/my-upload-key.jks" debug.keystore
+
+      - name: Upload Debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA-Race-X-debug-apk
+          path: dist/GTA-Race-X-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Debug AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA-Race-X-debug-aab
+          path: dist/GTA-Race-X-debug.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release APK artifact
+        if: steps.release_check.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA-Race-X-release-apk
+          path: dist/GTA-Race-X-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release AAB artifact
+        if: steps.release_check.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTA-Race-X-release-aab
+          path: dist/GTA-Race-X-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release on version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "GTA Race X ${{ github.ref_name }}"
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
