@@ -1,6 +1,6 @@
 # GTA RACE X — DRIVE BEYOND LIMITS.
 
-![Version](https://img.shields.io/badge/Version-1.1.0-E50914)
+![Version](https://img.shields.io/badge/Version-2.0.0-E50914)
 ![Android](https://img.shields.io/badge/Platform-Android%20(API%2024--36)-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.4.21-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20M3-4285F4?logo=jetpackcompose&logoColor=white)
@@ -36,28 +36,20 @@ This repository ships with two turnkey workflows inside `.github/workflows/`:
 | Workflow File | Triggers | Permissions | Outputs |
 | --- | --- | --- | --- |
 | `.github/workflows/ci-tests.yml` | Pull requests to `main` / `master`, manual dispatch | `contents: read` | Debug Kotlin compilation, all unit & Robolectric tests, HTML test report artifact (`pr-unit-test-report`) |
-| `.github/workflows/android-build.yml` | Push to `main` / `master`, `v*` version tags, manual dispatch | `contents: write` | **Debug APK** (`GTA-Race-X-debug.apk`), **Debug AAB** (`GTA-Race-X-debug.aab`), optional **Signed Release APK & AAB**, plus automatic **GitHub Releases** on `v*` tags |
+| `.github/workflows/android-build.yml` | Push to `main` / `master`, `v*` version tags, manual dispatch | `contents: write` | Versioned **Debug APK** (`GTA-Race-X-v2.0.0-debug.apk`), **Debug AAB**, optional **Signed Release APK & AAB**, plus **automatic GitHub Releases** matching `versionName` on every push |
 
 ---
 
 ## Downloading & Installing the APK Directly from GitHub (No PC Required)
 
-### Option 1: From GitHub Actions (Every Push to `main`/`master` or Manual Run)
-1. Push your changes to `main` or `master`—or open **Actions → Android APK & AAB Build and Release → Run workflow**.
+### Option 1: Direct One-Tap APK Download via GitHub Releases (Automatic on Every Push!)
+1. Push your updates to `main` or `master` (or click **Run workflow** under **Actions → Android APK & AAB Build and Release**).
 2. Wait for the build job to turn green (~3–6 minutes on first run, faster with Gradle caching).
-3. Open the completed run and scroll to **Artifacts**:
-   - **`GTA-Race-X-debug-apk`** — ready to sideload directly onto Android.
-   - **`GTA-Race-X-debug-aab`** — Android App Bundle build verification artifact.
-   - **`GTA-Race-X-release-apk`** & **`GTA-Race-X-release-aab`** — included automatically when release signing secrets are configured.
-4. Download the APK artifact on your Android phone, unzip it, and tap **`GTA-Race-X-debug.apk`** to install.
+3. Open your repository's **Releases** tab on GitHub — **GTA Race X v2.0.0** is automatically created/updated with standalone **`GTA-Race-X-v2.0.0-debug.apk`** and **`.aab`** files ready for one-tap download (no zip extraction required on Android!).
 
-### Option 2: Direct One-Tap APK Download via GitHub Releases (Version Tags)
-1. Tag a release (for example `v1.1.0`) via Git or GitHub's web UI:
-   ```bash
-   git tag v1.1.0
-   git push origin v1.1.0
-   ```
-2. GitHub Actions automatically builds the app, creates the **GTA Race X v1.1.0** GitHub Release with generated release notes, and attaches the standalone `.apk` and `.aab` files directly—no zip extraction required on Android.
+### Option 2: From GitHub Actions Artifacts or Custom Version Tags
+- Every run also uploads **`GTA-Race-X-v2.0.0-debug-apk`** and **`GTA-Race-X-v2.0.0-debug-aab`** (plus signed Release artifacts when signing secrets are set) under the workflow run's **Artifacts** section.
+- You can also push any custom `v*` tag (e.g., `git tag v2.0.0 && git push origin v2.0.0`) to publish a matching release tag.
 
 ---
 

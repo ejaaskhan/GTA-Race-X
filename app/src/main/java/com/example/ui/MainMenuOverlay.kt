@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.BuildConfig
 import com.example.R
 import com.example.data.GameCatalog
 import com.example.data.GameScreen
@@ -87,17 +88,36 @@ fun MainMenuOverlay(
         ) {
             // Top Brand Header
             Column {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "GTA RACE ",
-                        style = MaterialTheme.typography.displayMedium,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "X",
-                        style = MaterialTheme.typography.displayMedium,
-                        color = RacingCrimson
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "GTA RACE ",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "X",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = RacingCrimson
+                        )
+                    }
+                    Surface(
+                        color = GraphiteSurface.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, NitroCyan.copy(alpha = 0.65f)),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = NitroCyan,
+                            modifier = Modifier
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .testTag("menu_version_badge")
+                        )
+                    }
                 }
                 Text(
                     text = stringResource(R.string.brand_tagline),

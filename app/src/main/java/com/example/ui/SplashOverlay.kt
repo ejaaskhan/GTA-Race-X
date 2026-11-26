@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.R
 import com.example.ui.theme.CarbonDark
 import com.example.ui.theme.CrimsonGlow
@@ -275,9 +276,10 @@ fun SplashOverlay(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = stringResource(R.string.splash_loading_label),
+                        text = "${stringResource(R.string.splash_loading_label)} • v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        modifier = Modifier.testTag("splash_version_label")
                     )
                     Text(
                         text = stringResource(R.string.splash_skip_hint),

@@ -92,6 +92,24 @@ jobs:
             echo "::notice::app/google-services.json not found; building with Google Services passthrough."
           fi
 
+      - name: Extract app version from app/build.gradle.kts
+        id: app_version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_NAME="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
+            if [ -z "$VERSION_NAME" ]; then
+              VERSION_NAME="2.0.0"
+            fi
+            RELEASE_TAG="v${VERSION_NAME}"
+          fi
+          echo "version=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved GTA Race X version: ${VERSION_NAME} (Release Tag: ${RELEASE_TAG})"
+
       - name: Run unit & Robolectric tests
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests != false }}
         shell: bash
@@ -99,12 +117,14 @@ jobs:
 
       - name: Build Debug APK & Debug AAB
         shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.app_version.outputs.tag }}
         run: |
           gradle :app:assembleDebug :app:bundleDebug --stacktrace
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/GTA-Race-X-debug.apk
-          cp app/build/outputs/bundle/debug/app-debug.aab dist/GTA-Race-X-debug.aab
-          ls -lh dist/GTA-Race-X-debug.apk dist/GTA-Race-X-debug.aab
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/GTA-Race-X-${RELEASE_TAG}-debug.apk"
+          cp app/build/outputs/bundle/debug/app-debug.aab "dist/GTA-Race-X-${RELEASE_TAG}-debug.aab"
+          ls -lh dist/
 
       - name: Check Release signing secrets
         id: release_check
@@ -126,6 +146,7 @@ jobs:
         if: steps.release_check.outputs.configured == 'true'
         shell: bash
         env:
+          RELEASE_TAG: ${{ steps.app_version.outputs.tag }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -135,9 +156,9 @@ jobs:
           export KEYSTORE_PATH="$KEYSTORE_FILE"
           gradle :app:assembleRelease :app:bundleRelease --stacktrace
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/GTA-Race-X-release.apk
-          cp app/build/outputs/bundle/release/app-release.aab dist/GTA-Race-X-release.aab
-          ls -lh dist/GTA-Race-X-release.apk dist/GTA-Race-X-release.aab
+          cp app/build/outputs/apk/release/app-release.apk "dist/GTA-Race-X-${RELEASE_TAG}-release.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/GTA-Race-X-${RELEASE_TAG}-release.aab"
+          ls -lh dist/
 
       - name: Clean up temporary signing files
         if: always()
@@ -147,16 +168,16 @@ jobs:
       - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v6
         with:
-          name: GTA-Race-X-debug-apk
-          path: dist/GTA-Race-X-debug.apk
+          name: GTA-Race-X-${{ steps.app_version.outputs.tag }}-debug-apk
+          path: dist/GTA-Race-X-*-debug.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload Debug AAB artifact
         uses: actions/upload-artifact@v6
         with:
-          name: GTA-Race-X-debug-aab
-          path: dist/GTA-Race-X-debug.aab
+          name: GTA-Race-X-${{ steps.app_version.outputs.tag }}-debug-aab
+          path: dist/GTA-Race-X-*-debug.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -164,8 +185,8 @@ jobs:
         if: steps.release_check.outputs.configured == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: GTA-Race-X-release-apk
-          path: dist/GTA-Race-X-release.apk
+          name: GTA-Race-X-${{ steps.app_version.outputs.tag }}-release-apk
+          path: dist/GTA-Race-X-*-release.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -173,21 +194,26 @@ jobs:
         if: steps.release_check.outputs.configured == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: GTA-Race-X-release-aab
-          path: dist/GTA-Race-X-release.aab
+          name: GTA-Race-X-${{ steps.app_version.outputs.tag }}-release-aab
+          path: dist/GTA-Race-X-*-release.aab
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub Release on version tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Auto-Publish GitHub Release (APK & AAB)
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.app_version.outputs.tag }}
         run: |
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Updating existing GitHub Release ${RELEASE_TAG} with fresh APK & AAB..."
+            gh release upload "${RELEASE_TAG}" dist/* --clobber
+            gh release edit "${RELEASE_TAG}" --title "GTA Race X ${RELEASE_TAG}" --latest
           else
-            gh release create "${GITHUB_REF_NAME}" dist/* \
-              --title "GTA Race X ${GITHUB_REF_NAME}" \
-              --generate-notes
+            echo "Creating new GitHub Release ${RELEASE_TAG} at ${GITHUB_SHA}..."
+            gh release create "${RELEASE_TAG}" dist/* \
+              --target "${GITHUB_SHA}" \
+              --title "GTA Race X ${RELEASE_TAG}" \
+              --generate-notes \
+              --latest
           fi
