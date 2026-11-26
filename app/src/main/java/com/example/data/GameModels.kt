@@ -17,7 +17,7 @@ enum class GameScreen {
 }
 
 enum class GameMode(val title: String, val subtitle: String) {
-    FREE_ROAM("FREE DRIVE", "Roam all 7 city districts with live traffic, signals & dynamic weather"),
+    FREE_ROAM("FREE DRIVE", "Roam Downtown, Coastal Highway, Mountain Hills, City Parks & Repair Bays"),
     STREET_RACE("STREET RACING", "Grid start against 3 overtaking AI rivals to claim 1st place"),
     TIME_TRIAL("TIME TRIAL", "Beat gold sector targets across highway, bridge & tunnel"),
     CHECKPOINT_RACE("CHECKPOINT CHALLENGE", "Blast through high-speed neon checkpoint gates across the city"),
@@ -243,7 +243,8 @@ data class CareerEventSpec(
 data class RadarBlip(
     val x: Float,
     val z: Float,
-    val isRival: Boolean
+    val isRival: Boolean,
+    val isRepairBay: Boolean = false
 )
 
 @Keep
@@ -397,6 +398,14 @@ data class TelemetrySnapshot(
     val roadWetness: Float = 0f,
     val collisionIntensity: Float = 0f,
     val avgSuspensionCompression: Float = 0.35f,
+    val healthNormalized: Float = 1.0f,
+    val frontDamage: Float = 0f,
+    val rearDamage: Float = 0f,
+    val leftDamage: Float = 0f,
+    val rightDamage: Float = 0f,
+    val impactFlashAlpha: Float = 0f,
+    val damageStatusLabel: String = "INTACT",
+    val repairedNoticeActive: Boolean = false,
     val fps: Int = 60
 )
 

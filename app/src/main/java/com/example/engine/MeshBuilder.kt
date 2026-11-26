@@ -282,25 +282,46 @@ class MeshBuilder(initialVertices: Int = 256) {
             val iz1 = cos(a1) * rimRad
             addQuad(hw, iy0, iz0, hw, y0, z0, hw, y1, z1, hw, iy1, iz1, tireR, tireG, tireB)
             addQuad(-hw, y0, z0, -hw, iy0, iz0, -hw, iy1, iz1, -hw, y1, z1, tireR, tireG, tireB)
+
+            // Recessed ventilated steel brake rotor disc visible behind spokes
+            val discRad = rimRad * 0.78f
+            val dy0 = sin(a0) * discRad
+            val dz0 = cos(a0) * discRad
+            val dy1 = sin(a1) * discRad
+            val dz1 = cos(a1) * discRad
+            val discShade = if (i % 2 == 0) 0.64f else 0.54f
+            addQuad(hw - 0.055f, 0f, 0f, hw - 0.055f, dy0, dz0, hw - 0.055f, dy1, dz1, hw - 0.055f, 0f, 0f, discShade, discShade + 0.02f, discShade + 0.06f)
+            addQuad(-hw + 0.055f, dy1, dz1, -hw + 0.055f, dy0, dz0, -hw + 0.055f, 0f, 0f, -hw + 0.055f, 0f, 0f, discShade, discShade + 0.02f, discShade + 0.06f)
+
+            // Machined outer rim lip ring
+            val lipInner = rimRad * 0.88f
+            val ly0 = sin(a0) * lipInner
+            val lz0 = cos(a0) * lipInner
+            val ly1 = sin(a1) * lipInner
+            val lz1 = cos(a1) * lipInner
+            addQuad(hw + 0.004f, ly0, lz0, hw + 0.004f, iy0, iz0, hw + 0.004f, iy1, iz1, hw + 0.004f, ly1, lz1, rimR * 0.92f, rimG * 0.92f, rimB * 0.94f)
+            addQuad(-hw - 0.004f, iy0, iz0, -hw - 0.004f, ly0, lz0, -hw - 0.004f, ly1, lz1, -hw - 0.004f, iy1, iz1, rimR * 0.92f, rimG * 0.92f, rimB * 0.94f)
         }
-        // High-contrast 5-spoke metallic alloy rim on both faces so wheel spin is unmistakable
+        // High-contrast 5-spoke sculpted metallic alloy rim on both faces so wheel spin is unmistakable
         val spokeCount = 5
         for (s in 0 until spokeCount) {
             val angle = (2.0 * PI * s / spokeCount).toFloat()
-            val aL = angle - 0.16f
-            val aR = angle + 0.16f
-            val yL = sin(aL) * rimRad
-            val zL = cos(aL) * rimRad
-            val yR = sin(aR) * rimRad
-            val zR = cos(aR) * rimRad
-            val cY = sin(angle) * (rimRad * 0.2f)
-            val cZ = cos(angle) * (rimRad * 0.2f)
+            val aL = angle - 0.14f
+            val aR = angle + 0.14f
+            val yL = sin(aL) * (rimRad * 0.94f)
+            val zL = cos(aL) * (rimRad * 0.94f)
+            val yR = sin(aR) * (rimRad * 0.94f)
+            val zR = cos(aR) * (rimRad * 0.94f)
+            val cY = sin(angle) * (rimRad * 0.22f)
+            val cZ = cos(angle) * (rimRad * 0.22f)
             // Bright spoke bar on +X face and -X face
-            addQuad(hw + 0.01f, cY, cZ, hw + 0.01f, yL, zL, hw + 0.01f, yR, zR, hw + 0.01f, -cY, -cZ, rimR, rimG, rimB)
-            addQuad(-hw - 0.01f, yR, zR, -hw - 0.01f, yL, zL, -hw - 0.01f, cY, cZ, -hw - 0.01f, -cY, -cZ, rimR, rimG, rimB)
+            addQuad(hw + 0.012f, cY, cZ, hw + 0.012f, yL, zL, hw + 0.012f, yR, zR, hw + 0.012f, -cY, -cZ, rimR, rimG, rimB)
+            addQuad(-hw - 0.012f, yR, zR, -hw - 0.012f, yL, zL, -hw - 0.012f, cY, cZ, -hw - 0.012f, -cY, -cZ, rimR, rimG, rimB)
         }
+        // Racing crimson brake caliper tucked inside rotor
+        addBox(0f, rimRad * 0.36f, -rimRad * 0.42f, width * 0.72f, radius * 0.24f, radius * 0.28f, 0.92f, 0.12f, 0.16f)
         // Crimson center lug cap
-        addBox(0f, 0f, 0f, width + 0.04f, radius * 0.28f, radius * 0.28f, 0.92f, 0.12f, 0.18f)
+        addBox(0f, 0f, 0f, width + 0.045f, radius * 0.26f, radius * 0.26f, 0.92f, 0.12f, 0.18f)
     }
 
     fun build(): GlMesh {

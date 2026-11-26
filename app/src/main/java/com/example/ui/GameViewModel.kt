@@ -370,6 +370,12 @@ class GameViewModel(
         renderer.recoverCar()
     }
 
+    fun repairCar() {
+        renderer.repairCar()
+        audioSynthesizer.triggerUiSound(UiSoundType.UNLOCK)
+        showBanner("VEHICLE REPAIRED • 100% CHASSIS INTEGRITY")
+    }
+
     fun previewCarInGarage(carId: String) {
         audioSynthesizer.triggerUiSound(UiSoundType.CLICK)
         _previewCarId.value = carId

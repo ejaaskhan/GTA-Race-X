@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">GTA Race X</string>
     <string name="brand_tagline">DRIVE BEYOND LIMITS.</string>
+    <string name="splash_creator_credit">Game Created by Dev. E</string>
     <string name="splash_loading_label">INITIALIZING 3D ENGINE &amp; SYNTHWAVE AUDIO</string>
     <string name="splash_skip_hint">TAP TO LAUNCH</string>
     <string name="sign_in_google">SIGN IN WITH GOOGLE</string>
@@ -17,6 +18,8 @@
     <string name="hud_brake">BRAKE</string>
     <string name="hud_drift">H-BRAKE</string>
     <string name="hud_nitro">NITRO</string>
+    <string name="hud_repair">REPAIR</string>
+    <string name="hud_integrity">CHASSIS</string>
     <string name="hud_pause">PAUSED</string>
     <string name="hud_resume">RESUME</string>
     <string name="hud_restart">RESTART</string>

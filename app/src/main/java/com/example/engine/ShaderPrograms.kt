@@ -28,6 +28,7 @@ class LitShaderProgram {
     val uGroundAmb: Int
     val uNightFactor: Int
     val uReflectionStrength: Int
+    val uDamageFactor: Int
 
     init {
         programId = compileProgram(VERTEX_SHADER, FRAGMENT_SHADER)
@@ -53,6 +54,7 @@ class LitShaderProgram {
         uGroundAmb = GLES30.glGetUniformLocation(programId, "uGroundAmb")
         uNightFactor = GLES30.glGetUniformLocation(programId, "uNightFactor")
         uReflectionStrength = GLES30.glGetUniformLocation(programId, "uReflectionStrength")
+        uDamageFactor = GLES30.glGetUniformLocation(programId, "uDamageFactor")
     }
 
     fun use() {
@@ -116,6 +118,7 @@ class LitShaderProgram {
             uniform vec3 uGroundAmb;
             uniform float uNightFactor;
             uniform float uReflectionStrength;
+            uniform float uDamageFactor;
 
             out vec4 fragColor;
 
@@ -132,6 +135,20 @@ class LitShaderProgram {
                     texLum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
                 }
 
+                // Procedural crash wear: metallic scrapes, soot char & clearcoat dulling
+                float dmg = clamp(uDamageFactor, 0.0, 1.0);
+                float effRoughness = clamp(uRoughness + dmg * 0.48, 0.05, 0.96);
+                float effMetallic = clamp(uMetallic * (1.0 - dmg * 0.42), 0.05, 1.0);
+                if (dmg > 0.02) {
+                    float scratchWave = sin(vWorldPos.x * 23.0 + vWorldPos.z * 17.0) * cos(vWorldPos.y * 31.0 - vWorldPos.x * 11.0);
+                    float scuffMask = smoothstep(0.55 - dmg * 0.45, 0.92, abs(scratchWave));
+                    float charBand = smoothstep(0.20, 0.85, dmg) * (0.45 + 0.55 * sin(vWorldPos.x * 9.0 + vWorldPos.z * 7.0));
+                    vec3 bareMetal = vec3(0.46, 0.49, 0.54);
+                    vec3 sootChar = vec3(0.08, 0.07, 0.07);
+                    albedo = mix(albedo, bareMetal, scuffMask * dmg * 0.58);
+                    albedo = mix(albedo, sootChar, clamp(charBand * 0.42, 0.0, 0.52));
+                }
+
                 // Dynamic day/night hemisphere ambient
                 float hemi = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
                 vec3 ambient = albedo * mix(uGroundAmb, uSkyAmb, hemi) * 1.25;
@@ -140,9 +157,9 @@ class LitShaderProgram {
                 vec3 L = normalize(uSunDir);
                 float NdotL = max(dot(N, L), 0.0);
                 vec3 H = normalize(L + V);
-                float specExp = mix(140.0, 14.0, clamp(uRoughness, 0.05, 1.0));
+                float specExp = mix(140.0, 14.0, clamp(effRoughness, 0.05, 1.0));
                 float spec = pow(max(dot(N, H), 0.0), specExp);
-                float clearcoatSpec = pow(max(dot(N, H), 0.0), 180.0) * smoothstep(0.35, 0.95, uMetallic);
+                float clearcoatSpec = pow(max(dot(N, H), 0.0), 180.0) * smoothstep(0.35, 0.95, effMetallic) * (1.0 - dmg * 0.7);
                 vec3 diffuse = albedo * uSunColor * NdotL * uSunIntensity;
 
                 // Secondary warm-red city neon bounce (stronger at dusk/night)
@@ -157,9 +174,9 @@ class LitShaderProgram {
                 float neonStripe = 0.5 + 0.5 * sin(R.x * 7.0 + R.z * 5.0 + vWorldPos.x * 0.03);
                 vec3 skylineGlow = mix(vec3(0.08, 0.85, 1.0), vec3(0.96, 0.14, 0.26), neonStripe) * (0.35 + 0.65 * uNightFactor);
                 vec3 envDome = mix(uGroundAmb * 0.8, uSkyAmb * 2.1, skyMask) + skylineGlow * horizonBand * 0.72;
-                float glossFactor = (1.0 - clamp(uRoughness, 0.05, 0.95)) * clamp(uReflectionStrength, 0.2, 1.2);
-                vec3 specular = (mix(vec3(0.38), albedo * 0.82 + vec3(0.35), uMetallic) * spec * (0.68 + uMetallic * 1.15) + vec3(clearcoatSpec * 0.85)) * uSunColor;
-                vec3 clearcoat = envDome * (0.12 + fresnel * 0.88) * (0.14 + uMetallic * 0.78) * glossFactor;
+                float glossFactor = (1.0 - clamp(effRoughness, 0.05, 0.95)) * clamp(uReflectionStrength, 0.2, 1.2);
+                vec3 specular = (mix(vec3(0.38), albedo * 0.82 + vec3(0.35), effMetallic) * spec * (0.68 + effMetallic * 1.15) + vec3(clearcoatSpec * 0.85)) * uSunColor;
+                vec3 clearcoat = envDome * (0.12 + fresnel * 0.88) * (0.14 + effMetallic * 0.78) * glossFactor;
 
                 // Dynamic car headlight cone on road and nearby objects
                 vec3 headlightContrib = vec3(0.0);

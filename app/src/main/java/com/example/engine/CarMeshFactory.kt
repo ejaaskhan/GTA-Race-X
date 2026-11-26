@@ -267,29 +267,62 @@ object CarMeshFactory {
             r = 1f, g = 1f, b = 1f
         )
 
-        // 3. Base Carbon Trim, Intake Grilles, Mirrors, Exhausts & Class Signature Details
-        val trimB = MeshBuilder(384)
-        trimB.addBox(0f, 0.38f, -len * 0.48f, w * 0.68f, 0.20f, 0.12f, 0.07f, 0.08f, 0.10f)
-        trimB.addBox(-w * 0.50f, 0.88f, -0.35f, 0.26f, 0.12f, 0.18f, 0.14f, 0.16f, 0.20f)
-        trimB.addBox(w * 0.50f, 0.88f, -0.35f, 0.26f, 0.12f, 0.18f, 0.14f, 0.16f, 0.20f)
-        // Exhaust tips
+        // 3. Base Carbon Trim, Recessed Front Radiator Grille, Side Aero Ducts, Mirrors on Stalks, Interior Rollbar & Polished Exhausts
+        val trimB = MeshBuilder(512)
+        // Recessed central honeycomb grille + twin side brake-cooling air intakes
+        trimB.addBox(0f, 0.38f, -len * 0.482f, w * 0.52f, 0.20f, 0.12f, 0.06f, 0.07f, 0.09f)
+        trimB.addBox(0f, 0.41f, -len * 0.488f, w * 0.48f, 0.03f, 0.06f, 0.24f, 0.26f, 0.32f)
+        trimB.addBox(0f, 0.35f, -len * 0.488f, w * 0.48f, 0.03f, 0.06f, 0.24f, 0.26f, 0.32f)
+        for (sx in listOf(-1f, 1f)) {
+            // Side front brake-cooling air ducts
+            trimB.addBox(sx * (w * 0.36f), 0.36f, -len * 0.474f, w * 0.18f, 0.16f, 0.12f, 0.07f, 0.08f, 0.10f)
+            // Sculpted side-skirt aero vents behind front wheels
+            trimB.addBox(sx * (w * 0.485f), 0.52f, -len * 0.12f, 0.06f, 0.22f, 0.46f, 0.08f, 0.09f, 0.12f)
+            // Aerodynamic side mirrors with angled mounting stalks
+            trimB.addBox(sx * (w * 0.44f), 0.84f, -0.34f, 0.14f, 0.05f, 0.10f, 0.10f, 0.11f, 0.14f)
+            trimB.addBox(sx * (w * 0.53f), 0.89f, -0.35f, 0.22f, 0.11f, 0.17f, 0.16f, 0.18f, 0.22f)
+            // Recessed wheel-well dark liners so wheels sit cleanly inside fenders
+            trimB.addBox(sx * (trackHalf - 0.10f), wheelY + 0.08f, frontZ, 0.24f, wheelRadius * 1.4f, wheelRadius * 2.15f, 0.04f, 0.04f, 0.05f)
+            trimB.addBox(sx * (trackHalf - 0.10f), wheelY + 0.08f, rearZ, 0.26f, wheelRadius * 1.45f, wheelRadius * 2.20f, 0.04f, 0.04f, 0.05f)
+        }
+        // Subtle interior cockpit twin bucket-seat headrests & dark racing roll-bar silhouette
+        val seatY = (glassBottomY + glassTopY) * 0.50f
+        trimB.addBox(-0.30f, seatY, glassCz + 0.14f, 0.34f, 0.32f, 0.16f, 0.11f, 0.12f, 0.15f)
+        trimB.addBox(0.30f, seatY, glassCz + 0.14f, 0.34f, 0.32f, 0.16f, 0.11f, 0.12f, 0.15f)
+        trimB.addBox(0f, glassTopY - 0.09f, glassCz + 0.26f, w * 0.52f, 0.05f, 0.05f, 0.24f, 0.26f, 0.30f)
+
+        // Rear lower bumper diffuser surround + Exhaust tips with dark inner bores
+        trimB.addBox(0f, 0.36f, len * 0.482f, w * 0.84f, 0.24f, 0.10f, 0.07f, 0.08f, 0.11f)
         if (spec.vehicleClass == VehicleClass.MUSCLE) {
             // Iconic chrome supercharger V8 blower scoop protruding from hood!
-            trimB.addBox(0f, 0.94f, -len * 0.24f, 0.54f, 0.22f, 0.78f, 0.72f, 0.76f, 0.82f)
-            trimB.addBox(0f, 0.98f, -len * 0.32f, 0.46f, 0.14f, 0.16f, 0.86f, 0.12f, 0.14f)
-            // Quad muscular exhausts
+            trimB.addBox(0f, 0.94f, -len * 0.24f, 0.54f, 0.22f, 0.78f, 0.74f, 0.78f, 0.84f)
+            trimB.addBox(0f, 0.98f, -len * 0.32f, 0.46f, 0.14f, 0.16f, 0.88f, 0.12f, 0.14f)
+            // Quad muscular exhausts with dark bores
             for (ex in listOf(-0.56f, -0.34f, 0.34f, 0.56f)) {
-                trimB.addBox(ex, 0.34f, len * 0.50f, 0.16f, 0.14f, 0.24f, 0.62f, 0.65f, 0.72f)
+                trimB.addBox(ex, 0.34f, len * 0.505f, 0.16f, 0.14f, 0.24f, 0.68f, 0.72f, 0.78f)
+                trimB.addBox(ex, 0.34f, len * 0.532f, 0.11f, 0.09f, 0.05f, 0.05f, 0.05f, 0.07f)
             }
         } else {
-            trimB.addBox(0f, 0.75f, -len * 0.22f, w * 0.38f, 0.05f, 0.55f, 0.10f, 0.11f, 0.14f)
-            trimB.addBox(-0.34f, 0.34f, len * 0.50f, 0.22f, 0.16f, 0.24f, 0.55f, 0.58f, 0.65f)
-            trimB.addBox(0.34f, 0.34f, len * 0.50f, 0.22f, 0.16f, 0.24f, 0.55f, 0.58f, 0.65f)
+            // Sculpted carbon hood extractor vent
+            trimB.addBox(0f, 0.75f, -len * 0.22f, w * 0.38f, 0.05f, 0.55f, 0.09f, 0.10f, 0.13f)
+            // Polished dual/quad sports exhaust tips with dark inner bores
+            val exhaustOffsets = if (spec.vehicleClass == VehicleClass.HYPERCAR || spec.vehicleClass == VehicleClass.SUPERCAR) {
+                listOf(-0.46f, -0.24f, 0.24f, 0.46f)
+            } else {
+                listOf(-0.36f, 0.36f)
+            }
+            for (ex in exhaustOffsets) {
+                trimB.addBox(ex, 0.34f, len * 0.505f, 0.18f, 0.14f, 0.24f, 0.64f, 0.68f, 0.74f)
+                trimB.addBox(ex, 0.34f, len * 0.532f, 0.12f, 0.09f, 0.05f, 0.04f, 0.05f, 0.07f)
+            }
         }
         if (spec.vehicleClass == VehicleClass.SUPERCAR || spec.vehicleClass == VehicleClass.HYPERCAR) {
-            // Mid-engine rear carbon deck louvers
+            // Mid-engine rear carbon deck louvers + sculpted side air intakes
             for (li in 0..3) {
                 trimB.addBox(0f, 0.88f, len * (0.14f + li * 0.06f), w * 0.52f, 0.05f, 0.14f, 0.09f, 0.10f, 0.13f)
+            }
+            for (sx in listOf(-1f, 1f)) {
+                trimB.addBox(sx * (w * 0.50f), 0.62f, len * 0.10f, 0.10f, 0.26f, 0.62f, 0.07f, 0.08f, 0.11f)
             }
         }
 
@@ -299,15 +332,19 @@ object CarMeshFactory {
         // 5. Four Swappable 3D Spoiler Meshes (STOCK, LIP, GT_WING, HYPER_AERO)
         val spoilerMeshes = buildSpoilers(len, w, spec.spoilerHeight)
 
-        // 6. Emissive Angular LED Headlights (white vertices tinted dynamically by HeadlightStyle)
-        val headB = MeshBuilder(64)
+        // 6. Emissive Angular LED Headlights + Swept DRL Accent Brows (tinted dynamically by HeadlightStyle)
+        val headB = MeshBuilder(96)
         val headY = if (spec.vehicleClass == VehicleClass.MUSCLE) 0.64f else 0.54f
         headB.addBox(-w * 0.34f, headY, -len * 0.468f, 0.46f, 0.11f, 0.14f, 1.0f, 1.0f, 1.0f)
         headB.addBox(w * 0.34f, headY, -len * 0.468f, 0.46f, 0.11f, 0.14f, 1.0f, 1.0f, 1.0f)
+        headB.addBox(-w * 0.35f, headY + 0.08f, -len * 0.456f, 0.48f, 0.03f, 0.18f, 0.92f, 0.96f, 1.0f)
+        headB.addBox(w * 0.35f, headY + 0.08f, -len * 0.456f, 0.48f, 0.03f, 0.18f, 0.92f, 0.96f, 1.0f)
 
-        // 7. Emissive Full-Width Crimson LED Taillights
-        val tailB = MeshBuilder(64)
+        // 7. Emissive Full-Width Crimson LED Taillights + Center Brake Strip
+        val tailB = MeshBuilder(96)
         tailB.addBox(0f, 0.68f, len * 0.478f, w * 0.84f, 0.10f, 0.10f, 1.0f, 0.10f, 0.14f)
+        tailB.addBox(-w * 0.35f, 0.68f, len * 0.485f, 0.38f, 0.14f, 0.06f, 1.0f, 0.06f, 0.10f)
+        tailB.addBox(w * 0.35f, 0.68f, len * 0.485f, 0.38f, 0.14f, 0.06f, 1.0f, 0.06f, 0.10f)
 
         // 8. Realistic Visible Wheel Mesh (grooved rubber tire + metallic 5-spoke rim)
         val wheelB = MeshBuilder(256)

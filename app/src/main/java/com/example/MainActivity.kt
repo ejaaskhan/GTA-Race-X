@@ -72,7 +72,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        configureImmersiveFullscreen()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideSystemBars()
 
         setContent {
             GtaRaceXTheme {
@@ -84,12 +85,11 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            configureImmersiveFullscreen()
+            hideSystemBars()
         }
     }
 
-    private fun configureImmersiveFullscreen() {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+    private fun hideSystemBars() {
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -298,7 +298,8 @@ private fun AuthenticatedGameHost(
                     onCycleCamera = viewModel::cycleCameraMode,
                     onRecoverCar = viewModel::recoverCar,
                     onRestart = viewModel::restartCurrentSession,
-                    onExitToMenu = { viewModel.navigateTo(GameScreen.MAIN_MENU) }
+                    onExitToMenu = { viewModel.navigateTo(GameScreen.MAIN_MENU) },
+                    onRepairCar = viewModel::repairCar
                 )
             }
         }

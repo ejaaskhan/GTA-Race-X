@@ -316,7 +316,10 @@ class AiRacerSystem {
                     if (impactSpeed > 3.5f) {
                         val normImpact = (impactSpeed / 28f).coerceIn(0.22f, 0.95f)
                         p.impactShakeIntensity = maxOf(p.impactShakeIntensity, normImpact)
-                        vfxListener?.onCollisionSpark((p.x + r.x) * 0.5f, p.y, (p.z + r.z) * 0.5f, nx, nz, normImpact)
+                        val cx = (p.x + r.x) * 0.5f
+                        val cz = (p.z + r.z) * 0.5f
+                        vfxListener?.onCollisionSpark(cx, p.y, cz, nx, nz, normImpact)
+                        p.registerImpactDamage(cx, cz, nx, nz, impactSpeed, vfxListener)
                     }
                 }
             }

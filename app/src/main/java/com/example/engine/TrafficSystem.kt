@@ -287,9 +287,9 @@ class TrafficSystem {
 
     private fun handleIntersectionAndBounds(v: TrafficVehicle) {
         val along = if (v.axisIsNS) v.z else v.x
-        // Wrap around outer city ring cleanly
-        if (along < -370f || along > 370f) {
-            val wrapped = if (along < -370f) 355f else -355f
+        // Wrap around expanded outer city/coastal/mountain ring cleanly
+        if (along < -550f || along > 550f) {
+            val wrapped = if (along < -550f) 530f else -530f
             assignLanePosition(v, wrapped)
             if (isInBayWater(v.x, v.z)) {
                 v.axisIsNS = false
@@ -371,6 +371,7 @@ class TrafficSystem {
                         val cx = (p.x + v.x) * 0.5f
                         val cz = (p.z + v.z) * 0.5f
                         vfxListener?.onCollisionSpark(cx, p.y, cz, nx, nz, normImpact)
+                        p.registerImpactDamage(cx, cz, nx, nz, impactSpeed, vfxListener)
                     }
                 }
             }

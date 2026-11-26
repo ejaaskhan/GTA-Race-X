@@ -1,5 +1,6 @@
 # GTA RACE X — DRIVE BEYOND LIMITS.
 
+![Version](https://img.shields.io/badge/Version-1.1.0-E50914)
 ![Android](https://img.shields.io/badge/Platform-Android%20(API%2024--36)-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.4.21-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20M3-4285F4?logo=jetpackcompose&logoColor=white)
@@ -11,18 +12,20 @@
 > `![Build & Release](https://github.com/<OWNER>/<REPO>/actions/workflows/android-build.yml/badge.svg)`
 > `![PR CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci-tests.yml/badge.svg)`
 
-**GTA Race X** is a native Android 3D open-world street racing game built with **Kotlin**, **Jetpack Compose**, and a custom hardware-accelerated **OpenGL ES 3.0** rendering engine—optimized for smooth 30–60 FPS gameplay on 6–8 GB RAM Android devices.
+**GTA Race X** (*Game Created by Dev. E*) is a native Android 3D open-world street racing game built with **Kotlin**, **Jetpack Compose**, and a custom hardware-accelerated **OpenGL ES 3.0** rendering engine—optimized for smooth 30–60 FPS gameplay on 6–8 GB RAM Android devices.
 
 ---
 
 ## Key Features
 
-- **7-District Open-World City:** Downtown, Residential, Industrial, Highway, Suspension Bridge, Neon Tunnel, and Racing District with live AI traffic, traffic signals, and collision physics.
-- **5 Playable Game Modes:** Free Drive, Street Racing (vs. 3 overtaking AI rivals), Time Trial, Checkpoint Challenge, and Drift Challenge with live countdowns, mini-map radar, rewards, and mission completion screens.
-- **5 Original 3D Vehicles & Neon Showroom Garage:** Sports Car, Supercar, Muscle Car, Drift Car, and Hypercar with 360° drag orbit preview, 6 visual customizations (paint, rims, spoilers, body kits, window tint, headlights + underglow), and 6 physics-backed mechanical upgrades (Engine, Turbo, Brakes, Tires, Suspension, Nitro).
-- **Dynamic Weather, Lighting & Pooled VFX:** Automatic or manual Day/Night cycle, Rain (reduced wet-road grip + rain streaks + tire mist), Fog, procedural clearcoat reflections, feathered elliptical contact shadows, and 144-particle zero-allocation tire smoke, Nitro flame trails, and collision sparks.
+- **Splash Screen & Creator Credit:** Animated neon **GTA RACE X — DRIVE BEYOND LIMITS.** launch splash displaying **Game Created by Dev. E** with a seamless 3D camera fly-in into the open world.
+- **Expanded 10-Zone Realistic Open-World Map:** Explore **Downtown**, **Residential**, **Industrial**, **Elevated Highway**, **Suspension Bridge**, **Neon Tunnel**, **Racing District**, plus the expanded **Coastal Highway** (oceanfront beach, palms, guardrails), **Mountain Hills** (continuous elevated ridge roads, pines, boulders, overlooks), **City Parks** (turf lawns, walkways, fountains), and **4 Glowing Neon Emerald Drive-Through Repair Bays**.
+- **Realistic 3D Car Visuals & Neon Showroom Garage:** 5 original vehicle classes (Sports Car, Supercar, Muscle Car, Drift Car, Hypercar) featuring slatted radiator grilles, side brake-cooling ducts, mirror stalks, wheel-well liners, interior bucket seats & rollbar silhouettes, dual/quad exhausts with dark inner bores, and ventilated brake rotors with crimson calipers inside alloy rims—plus 360° drag orbit preview, 6 visual customizations, and 6 physics-backed mechanical upgrades.
+- **Car Accident & Progressive Damage System:** Directional 4-zone chassis damage (Front/Rear/Left/Right), crash sparks & tumbling road-bouncing debris, rising hood engine smoke below 55% integrity (dark oil soot + hot embers below 28%), dynamic paint wear/scuff shaders, front-impact headlight flicker, progressive top-speed/acceleration loss and asymmetric steering pull, crimson impact screen flash, live HUD Chassis Integrity bar, and instant 100% restoration via **Drive-Through Repair Bays** or the HUD **Quick Repair** button.
+- **5 Playable Game Modes:** Free Drive, Street Racing (vs. 3 overtaking AI rivals), Time Trial, Checkpoint Challenge, and Drift Challenge with live countdowns, expanded mini-map radar with emerald Repair Bay `+` markers, rewards, and mission completion screens.
+- **Dynamic Weather, Lighting & Pooled VFX:** Automatic or manual Day/Night cycle, Rain (reduced wet-road grip + rain streaks + tire mist), Fog, procedural clearcoat reflections, feathered elliptical contact shadows, and 144-particle zero-allocation tire smoke, engine smoke, crash debris, Nitro flame trails, and collision sparks.
 - **Procedural Synthwave & Vehicle Audio Engine:** Zero-allocation real-time DSP synthesis for V10 engine RPM, throttle growl, ceramic brakes, tire screech, Nitro spool/afterburner, impact collisions, UI chimes, and a 120 BPM Neon Synthwave soundtrack with independent **Music** and **SFX** toggles.
-- **Graphics Optimization & Player Progression:** Low / Medium / High LOD presets, landscape immersive fullscreen, animated neon splash screen with 3D camera fly-in, XP/Levels/10 Achievements, and hybrid **Jetpack DataStore + Cloud Firestore** sync via Google Sign-In.
+- **Graphics Optimization & Player Progression:** Low / Medium / High LOD presets, landscape immersive fullscreen, XP/Levels/10 Achievements, and hybrid **Jetpack DataStore + Cloud Firestore** sync via Google Sign-In.
 
 ---
 
@@ -32,7 +35,7 @@ This repository ships with two turnkey workflows inside `.github/workflows/`:
 
 | Workflow File | Triggers | Permissions | Outputs |
 | --- | --- | --- | --- |
-| `.github/workflows/ci-tests.yml` | Pull requests to `main` / `master`, manual dispatch | `contents: read` | Debug Kotlin compilation, all 38 unit & Robolectric tests, HTML test report artifact (`pr-unit-test-report`) |
+| `.github/workflows/ci-tests.yml` | Pull requests to `main` / `master`, manual dispatch | `contents: read` | Debug Kotlin compilation, all unit & Robolectric tests, HTML test report artifact (`pr-unit-test-report`) |
 | `.github/workflows/android-build.yml` | Push to `main` / `master`, `v*` version tags, manual dispatch | `contents: write` | **Debug APK** (`GTA-Race-X-debug.apk`), **Debug AAB** (`GTA-Race-X-debug.aab`), optional **Signed Release APK & AAB**, plus automatic **GitHub Releases** on `v*` tags |
 
 ---
@@ -49,12 +52,12 @@ This repository ships with two turnkey workflows inside `.github/workflows/`:
 4. Download the APK artifact on your Android phone, unzip it, and tap **`GTA-Race-X-debug.apk`** to install.
 
 ### Option 2: Direct One-Tap APK Download via GitHub Releases (Version Tags)
-1. Tag a release (for example `v1.0.0`) via Git or GitHub's web UI:
+1. Tag a release (for example `v1.1.0`) via Git or GitHub's web UI:
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v1.1.0
+   git push origin v1.1.0
    ```
-2. GitHub Actions automatically builds the app, creates the **GTA Race X v1.0.0** GitHub Release with generated release notes, and attaches the standalone `.apk` and `.aab` files directly—no zip extraction required on Android.
+2. GitHub Actions automatically builds the app, creates the **GTA Race X v1.1.0** GitHub Release with generated release notes, and attaches the standalone `.apk` and `.aab` files directly—no zip extraction required on Android.
 
 ---
 
@@ -104,7 +107,7 @@ cd <REPO>
 # 2. Restore the debug keystore from the tracked base64 archive
 base64 -d debug.keystore.base64 > debug.keystore
 
-# 3. Run all 38 unit & Robolectric tests
+# 3. Run all unit & Robolectric tests
 ./gradlew :app:testDebugUnitTest
 
 # 4. Build Debug APK (outputs app/build/outputs/apk/debug/app-debug.apk)
@@ -121,11 +124,11 @@ base64 -d debug.keystore.base64 > debug.keystore
 ## Project Architecture Overview
 
 - **`:app` (Android Application Module):**
-  - `engine/` — OpenGL ES 3.0 renderer, procedural shaders & 512×512 textures, 3D vehicle & 7-district world meshes, 4-wheel suspension/drift physics, AI traffic & racing rivals, pooled VFX particle system.
+  - `engine/` — OpenGL ES 3.0 renderer, procedural shaders (including dynamic damage wear) & 512×512 textures, detailed 3D vehicle/wheel & expanded open-world meshes (Coastal Highway, Mountain Hills, City Parks, 4 Repair Bays), 4-wheel suspension/drift/accident-damage physics, AI traffic & racing rivals, pooled VFX particle system.
   - `audio/` — Real-time procedural DSP synthesizer (engine, acceleration, brakes, tire screech, Nitro, collisions, UI SFX, 120 BPM synthwave BGM).
   - `data/` — Vehicle catalog, career events, XP/level/achievement rules, Jetpack DataStore local persistence, and Cloud Firestore sync repositories.
-  - `ui/` — Jetpack Compose Material 3 overlays (Animated Splash, Google Sign-In, Main Menu, Play Mode Selector, 3D Garage, Career, Driver Profile, Settings, Racing HUD).
-  - `src/test/` — 38 automated unit & Robolectric tests.
+  - `ui/` — Jetpack Compose Material 3 overlays (Animated Splash with *Game Created by Dev. E*, Google Sign-In, Main Menu, Play Mode Selector, 3D Garage, Career, Driver Profile, Settings, Racing HUD with Chassis Integrity & Quick Repair).
+  - `src/test/` — Automated unit & Robolectric test suite covering physics, expanded world zones, accident damage & repair, VFX pooling, progression, and Compose UI.
 - **`firestore.rules` & `firestore.test.js`:** Zero-trust Cloud Firestore security rules and standalone Node.js emulator test suite.
 
 ---

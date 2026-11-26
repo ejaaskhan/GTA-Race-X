@@ -16,6 +16,14 @@ data class AabbCollider(
     val maxY: Float
 )
 
+data class RepairBay(
+    val id: String,
+    val name: String,
+    val x: Float,
+    val z: Float,
+    val radius: Float = 16.5f
+)
+
 class CityChunk(
     val centerX: Float,
     val centerZ: Float,
@@ -52,9 +60,9 @@ class CityWorld {
     val colliders: List<AabbCollider>
 
     companion object {
-        const val WORLD_HALF = 420f
+        const val WORLD_HALF = 660f
         const val ROAD_WIDTH = 22f
-        val AVENUE_COORDS = listOf(-360f, -240f, -120f, 0f, 120f, 240f, 360f)
+        val AVENUE_COORDS = listOf(-540f, -360f, -240f, -120f, 0f, 120f, 240f, 360f, 540f)
 
         // Elevated East Highway on x = 360
         const val SKYWAY_X = 360f
@@ -68,6 +76,30 @@ class CityWorld {
         // West Neon Tunnel on x = -240 spanning z = -100..+100
         const val TUNNEL_X = -240f
         const val TUNNEL_HALF_LEN = 100f
+
+        // Coastal Highway shoreline corridor on x = -540
+        const val COASTAL_X = -540f
+        // Mountain Hills outer ridge road on x = 540 and z = -540
+        const val MOUNTAIN_X = 540f
+        const val MOUNTAIN_Z = -540f
+        const val MOUNTAIN_PEAK_HEIGHT = 15.5f
+
+        // 4 Glowing Emerald Drive-Through Repair Bays across the expanded open world
+        val REPAIR_BAYS: List<RepairBay> = listOf(
+            RepairBay("downtown_pit", "DOWNTOWN PIT BAY", 120f, 120f),
+            RepairBay("coastal_service", "COASTAL REPAIR BAY", COASTAL_X, 0f),
+            RepairBay("mountain_overlook", "MOUNTAIN SERVICE BAY", MOUNTAIN_X, -240f),
+            RepairBay("park_garage", "CITY PARK REPAIR BAY", -120f, 540f)
+        )
+
+        fun findRepairBay(x: Float, z: Float): RepairBay? {
+            for (bay in REPAIR_BAYS) {
+                val dx = x - bay.x
+                val dz = z - bay.z
+                if (dx * dx + dz * dz <= bay.radius * bay.radius) return bay
+            }
+            return null
+        }
 
         fun getGroundHeight(x: Float, z: Float): Float {
             // 1. Suspension Bridge along z = -360 (width +/- 14m)
@@ -91,10 +123,27 @@ class CityWorld {
                     else -> 0f
                 }
             }
-            return 0f
+
+            // 3. Smooth Continuous Mountain Hills Terrain in East (x > 420) and North-East (z < -450)
+            var hillH = 0f
+            if (x > 410f) {
+                val eastBlend = smoothstep((x - 410f) / 130f)
+                val ridgeWave = 0.65f + 0.35f * sin(z * 0.0085f + 0.6f)
+                hillH = max(hillH, eastBlend * MOUNTAIN_PEAK_HEIGHT * ridgeWave)
+            }
+            if (z < -450f && x > -340f) {
+                val northBlend = smoothstep((-450f - z) / 120f)
+                val coastalFade = smoothstep((x + 340f) / 160f)
+                val ridgeWave = 0.62f + 0.38f * cos(x * 0.009f)
+                hillH = max(hillH, northBlend * coastalFade * (MOUNTAIN_PEAK_HEIGHT * 0.92f) * ridgeWave)
+            }
+            return hillH
         }
 
         fun getDistrictName(x: Float, z: Float): String = when {
+            x <= -410f -> "COASTAL HIGHWAY"
+            x >= 420f || (z <= -455f && x > -360f) -> "MOUNTAIN HILLS"
+            z >= 400f && abs(x) < 420f -> "CITY PARK"
             abs(z - BRIDGE_Z) < 35f && abs(x) < 160f -> "BRIDGE"
             abs(x - TUNNEL_X) < 25f && abs(z) < TUNNEL_HALF_LEN + 10f -> "TUNNEL"
             abs(x - SKYWAY_X) < 30f && z in -320f..300f -> "HIGHWAY"
@@ -116,18 +165,68 @@ class CityWorld {
     init {
         val colliderList = mutableListOf<AabbCollider>()
 
-        // 1. Dark midnight city base slab & reflective bay water
-        val baseB = MeshBuilder(16)
+        // 1. Expanded City Ground Base, Sandy Coastal Beach, Mountain Hills Terrain & Oceanfront Water
+        val baseB = MeshBuilder(1024)
         baseB.addQuad(
-            -560f, -0.25f, 560f,
-            560f, -0.25f, 560f,
-            560f, -0.25f, -560f,
-            -560f, -0.25f, -560f,
+            -840f, -0.25f, 840f,
+            840f, -0.25f, 840f,
+            840f, -0.25f, -840f,
+            -840f, -0.25f, -840f,
             0.06f, 0.07f, 0.10f
         )
+        // Golden-sand Coastal Beach & Promenade Strip west of Coastal Highway (x = -562..-640)
+        baseB.addQuad(
+            -635f, -0.10f, 650f,
+            -556f, 0.02f, 650f,
+            -556f, 0.02f, -650f,
+            -635f, -0.10f, -650f,
+            0.62f, 0.56f, 0.42f
+        )
+        // Continuous Smooth Mountain Hills Mesh on East (x = 400..700) & North (z = -440..-700)
+        val terrainStep = 30f
+        var tx = 400f
+        while (tx < 700f) {
+            var tz = -700f
+            while (tz < 650f) {
+                val x0 = tx; val x1 = tx + terrainStep
+                val z0 = tz; val z1 = tz + terrainStep
+                val y00 = getGroundHeight(x0, z0) - 0.16f
+                val y10 = getGroundHeight(x1, z0) - 0.16f
+                val y11 = getGroundHeight(x1, z1) - 0.16f
+                val y01 = getGroundHeight(x0, z1) - 0.16f
+                val avgH = (y00 + y10 + y11 + y01) * 0.25f
+                val rockBlend = (avgH / MOUNTAIN_PEAK_HEIGHT).coerceIn(0f, 1f)
+                val gr = 0.12f + rockBlend * 0.20f
+                val gg = 0.24f + rockBlend * 0.10f
+                val gb = 0.14f + rockBlend * 0.16f
+                baseB.addQuad(x0, y01, z1, x1, y11, z1, x1, y10, z0, x0, y00, z0, gr, gg, gb)
+                tz += terrainStep
+            }
+            tx += terrainStep
+        }
+        var ntx = -360f
+        while (ntx < 400f) {
+            var ntz = -700f
+            while (ntz < -440f) {
+                val x0 = ntx; val x1 = ntx + terrainStep
+                val z0 = ntz; val z1 = ntz + terrainStep
+                val y00 = getGroundHeight(x0, z0) - 0.16f
+                val y10 = getGroundHeight(x1, z0) - 0.16f
+                val y11 = getGroundHeight(x1, z1) - 0.16f
+                val y01 = getGroundHeight(x0, z1) - 0.16f
+                val avgH = (y00 + y10 + y11 + y01) * 0.25f
+                val rockBlend = (avgH / MOUNTAIN_PEAK_HEIGHT).coerceIn(0f, 1f)
+                baseB.addQuad(
+                    x0, y01, z1, x1, y11, z1, x1, y10, z0, x0, y00, z0,
+                    0.12f + rockBlend * 0.22f, 0.23f + rockBlend * 0.10f, 0.15f + rockBlend * 0.18f
+                )
+                ntz += terrainStep
+            }
+            ntx += terrainStep
+        }
         groundBaseMesh = baseB.build()
 
-        val waterB = MeshBuilder(16)
+        val waterB = MeshBuilder(32)
         // Bay channel running under the suspension bridge at z = -360
         waterB.addQuad(
             -136f, -0.08f, -295f,
@@ -137,37 +236,50 @@ class CityWorld {
             0.04f, 0.14f, 0.28f,
             uScale = 6f, vScale = 4f
         )
+        // Wide Oceanfront Pacific Water West of Coastal Highway Beach
+        waterB.addQuad(
+            -860f, -0.08f, 760f,
+            -628f, -0.08f, 760f,
+            -628f, -0.08f, -760f,
+            -860f, -0.08f, -760f,
+            0.03f, 0.22f, 0.38f,
+            uScale = 12f, vScale = 24f
+        )
         waterMesh = waterB.build()
 
-        // 2. Ground city roads & intersections
-        val roadB = MeshBuilder(2048)
+        // 2. Expanded Ground & Mountain-Graded Roads across -540..+540
+        val roadB = MeshBuilder(4096)
         for (coord in AVENUE_COORDS) {
             // North-South avenue along x = coord (skip water channel gap on x=0 at z<-300 and skyway elevated section)
             if (coord != SKYWAY_X) {
-                var z = -360f
-                while (z < 360f) {
-                    val zNext = z + 40f
-                    val inBay = abs(coord) < 130f && z < -300f
+                var z = -540f
+                while (z < 540f) {
+                    val zNext = z + 30f
+                    val inBay = abs(coord) < 130f && z < -298f && zNext > -448f
                     if (!inBay) {
-                        addRoadSegmentNS(roadB, coord, z, zNext, 0.04f, 0.04f, ROAD_WIDTH)
+                        val y0 = getGroundHeight(coord, z) + 0.04f
+                        val y1 = getGroundHeight(coord, zNext) + 0.04f
+                        addRoadSegmentNS(roadB, coord, z, zNext, y0, y1, ROAD_WIDTH)
                     }
                     z = zNext
                 }
             }
             // East-West avenue along z = coord (skip suspension bridge span on z = -360)
-            var x = -360f
-            while (x < 360f) {
-                val xNext = x + 40f
+            var x = -540f
+            while (x < 540f) {
+                val xNext = x + 30f
                 val onBridge = coord == BRIDGE_Z && x >= -140f && xNext <= 140f
                 if (!onBridge) {
-                    addRoadSegmentEW(roadB, coord, x, xNext, 0.05f, 0.05f, ROAD_WIDTH)
+                    val y0 = getGroundHeight(x, coord) + 0.05f
+                    val y1 = getGroundHeight(xNext, coord) + 0.05f
+                    addRoadSegmentEW(roadB, coord, x, xNext, y0, y1, ROAD_WIDTH)
                 }
                 x = xNext
             }
         }
-        // Ground connectors at south/north ends of East Skyway
-        addRoadSegmentNS(roadB, SKYWAY_X, 300f, 360f, 0.04f, 0.04f, ROAD_WIDTH)
-        addRoadSegmentNS(roadB, SKYWAY_X, -360f, -320f, 0.04f, 0.04f, ROAD_WIDTH)
+        // Ground connectors at south/north ends of East Skyway + outer ramps
+        addRoadSegmentNS(roadB, SKYWAY_X, 300f, 540f, 0.04f, 0.04f, ROAD_WIDTH)
+        addRoadSegmentNS(roadB, SKYWAY_X, -540f, -320f, getGroundHeight(SKYWAY_X, -540f) + 0.04f, 0.04f, ROAD_WIDTH)
         roadMesh = roadB.build()
 
         // 3. Elevated East Highway + Suspension Bridge deck + Piers & Cables
@@ -275,6 +387,22 @@ class CityWorld {
         addHighwayGantry(structB, landmarkNeonB, 0f, 0f, -60f, true)
         addHighwayGantry(structB, landmarkNeonB, 120f, 0f, 0f, false)
 
+        // Coastal Highway seaside guardrail & palm-lined oceanfront promenade along x = -554
+        var czGuard = -520f
+        while (czGuard <= 520f) {
+            structB.addBox(COASTAL_X - 12.6f, 0.65f, czGuard, 0.7f, 1.1f, 34f, 0.78f, 0.82f, 0.88f)
+            landmarkNeonB.addBox(COASTAL_X - 12.1f, 1.05f, czGuard, 0.18f, 0.18f, 32f, 0.0f, 0.90f, 0.95f)
+            if (((czGuard.toInt() / 40) and 1) == 0) {
+                addPalmTree(structB, COASTAL_X - 20f, czGuard)
+            }
+            czGuard += 40f
+        }
+
+        // 4 Glowing Neon Emerald Drive-Through Repair Bay Service Stations
+        for (bay in REPAIR_BAYS) {
+            addRepairBayStructure(structB, landmarkNeonB, bay)
+        }
+
         structuresMesh = structB.build()
         landmarksNeonMesh = landmarkNeonB.build()
 
@@ -293,18 +421,71 @@ class CityWorld {
                 val cz = (zMin + zMax) * 0.5f
 
                 // Skip water bay blocks directly south/north of suspension bridge
-                if (abs(cx) < 125f && cz < -290f) continue
+                if (abs(cx) < 125f && cz in -445f..-290f) continue
 
                 val bldB = MeshBuilder(512)
                 val propB = MeshBuilder(512)
                 val neonB = MeshBuilder(256)
                 val lodB = MeshBuilder(128)
 
-                val isRacingDistrict = cx < -120f && cz < -120f
-                val isResidential = cx < -120f && cz >= 120f
-                val isIndustrial = cx >= 120f && cz >= 120f
-                val isDowntown = !isRacingDistrict && !isResidential && !isIndustrial && max(abs(cx), abs(cz)) <= 190f
+                val isCoastal = cx < -390f
+                val isMountain = cx > 390f || (cz < -390f && cx > -360f)
+                val isCityPark = !isCoastal && !isMountain && cz > 390f
+                val isRacingDistrict = !isCoastal && !isMountain && !isCityPark && cx < -120f && cz < -120f
+                val isResidential = !isCoastal && !isMountain && !isCityPark && cx < -120f && cz >= 120f
+                val isIndustrial = !isCoastal && !isMountain && !isCityPark && cx >= 120f && cz >= 120f
+                val isDowntown = !isCoastal && !isMountain && !isCityPark && !isRacingDistrict && !isResidential && !isIndustrial && max(abs(cx), abs(cz)) <= 190f
 
+                // Handle expanded outer biomes first (Coastal Highway, Mountain Hills, City Parks)
+                if (isCoastal) {
+                    // Seaside beach villas, palm groves, and boardwalk decks overlooking ocean
+                    propB.addBox(cx, 0.22f, cz, xMax - xMin + 2f, 0.44f, zMax - zMin + 2f, 0.32f, 0.30f, 0.24f)
+                    for (px in listOf(xMin + 14f, cx, xMax - 14f)) {
+                        addPalmTree(propB, px, zMin + 12f)
+                        addPalmTree(propB, px, zMax - 12f)
+                    }
+                    // Modern glass beachfront pavilion villa
+                    bldB.addBox(cx + 12f, 5.5f, cz, 34f, 11f, 28f, 0.90f, 0.88f, 0.84f, 2f, 1f)
+                    neonB.addBox(cx + 12f, 11.4f, cz, 34.4f, 0.55f, 28.4f, 0.0f, 0.92f, 0.96f)
+                    lodB.addBox(cx + 12f, 5.5f, cz, 34f, 11f, 28f, 0.55f, 0.58f, 0.62f)
+                    colliderList.add(AabbCollider(cx - 5f, cx + 29f, cz - 14.5f, cz + 14.5f, 11.5f))
+                } else if (isMountain) {
+                    // Alpine pine forest slopes, rocky cliff boulders & scenic lookout cabins on hill terrain
+                    val groundY = getGroundHeight(cx, cz)
+                    for (ox in listOf(-32f, 0f, 32f)) {
+                        for (oz in listOf(-28f, 28f)) {
+                            val tx = cx + ox
+                            val tz = cz + oz
+                            val ty = getGroundHeight(tx, tz)
+                            addPineTree(propB, tx, ty, tz)
+                        }
+                    }
+                    // Rocky boulder outcrops
+                    propB.addBox(cx - 18f, groundY + 2.2f, cz - 6f, 12f, 5.2f, 10f, 0.34f, 0.36f, 0.40f)
+                    propB.addBox(cx + 22f, groundY + 1.8f, cz + 12f, 10f, 4.2f, 9f, 0.30f, 0.32f, 0.36f)
+                    // Scenic mountain lodge chalet with warm amber roof trim
+                    bldB.addBox(cx, groundY + 4.5f, cz, 22f, 9f, 18f, 0.58f, 0.46f, 0.36f, 2f, 1f)
+                    neonB.addBox(cx, groundY + 9.2f, cz + 9.1f, 18f, 0.5f, 0.35f, 1.0f, 0.72f, 0.24f)
+                    lodB.addBox(cx, groundY + 4.5f, cz, 24f, 10f, 20f, 0.28f, 0.32f, 0.26f)
+                    colliderList.add(AabbCollider(cx - 11.5f, cx + 11.5f, cz - 9.5f, cz + 9.5f, groundY + 10f))
+                } else if (isCityPark) {
+                    // Lush Emerald City Park lawn, stone walking paths, illuminated fountain & dense tree canopy
+                    propB.addBox(cx, 0.20f, cz, xMax - xMin + 4f, 0.40f, zMax - zMin + 4f, 0.08f, 0.34f, 0.14f)
+                    // Cross-shaped stone walking plaza paths
+                    propB.addBox(cx, 0.43f, cz, xMax - xMin, 0.08f, 6.5f, 0.42f, 0.44f, 0.48f)
+                    propB.addBox(cx, 0.43f, cz, 6.5f, 0.08f, zMax - zMin, 0.42f, 0.44f, 0.48f)
+                    // Central illuminated park water fountain
+                    propB.addCylinderY(cx, 0.9f, cz, 7.5f, 7.0f, 1.2f, 12, 0.46f, 0.50f, 0.56f)
+                    neonB.addCylinderY(cx, 1.55f, cz, 5.8f, 5.6f, 0.25f, 12, 0.08f, 0.88f, 1.0f)
+                    // Dense park tree clusters in all 4 quadrants
+                    for (ox in listOf(-26f, -12f, 12f, 26f)) {
+                        for (oz in listOf(-38f, 38f)) {
+                            addUrbanTree(propB, cx + ox, cz + oz)
+                        }
+                    }
+                    lodB.addBox(cx, 3.2f, cz, 48f, 6.4f, 48f, 0.09f, 0.34f, 0.16f)
+                    colliderList.add(AabbCollider(cx - 7.5f, cx + 7.5f, cz - 7.5f, cz + 7.5f, 3.5f))
+                } else {
                 // Raised district sidewalk / plaza slab
                 val padR = if (isResidential) 0.14f else if (isIndustrial) 0.18f else 0.16f
                 val padG = if (isResidential) 0.22f else if (isIndustrial) 0.17f else 0.18f
@@ -411,7 +592,7 @@ class CityWorld {
                     }
                 }
 
-                // Street lamps along the block perimeter facing avenues
+                // Street lamps, urban trees & traffic signals for inner urban blocks
                 addStreetLamp(propB, neonB, xMin - 1.5f, cz - 24f, 1f, 0f)
                 addStreetLamp(propB, neonB, xMin - 1.5f, cz + 24f, 1f, 0f)
                 addStreetLamp(propB, neonB, xMax + 1.5f, cz - 24f, -1f, 0f)
@@ -434,6 +615,7 @@ class CityWorld {
                 addTrafficSignal(propB, neonB, xMin - 2f, zMin - 2f)
                 signalPosList.add(Pair(xMin - 5.6f, zMin - 2f))
                 addRoadSign(propB, neonB, xMax + 2f, zMax + 2f)
+                }
 
                 chunkList.add(
                     CityChunk(
@@ -553,6 +735,37 @@ class CityWorld {
         // Two-tier dark midnight emerald foliage cones
         propB.addCylinderY(x, 4.4f, z, 2.3f, 0.5f, 3.4f, 7, 0.08f, 0.32f, 0.18f)
         propB.addCylinderY(x, 6.4f, z, 1.7f, 0.15f, 2.8f, 7, 0.10f, 0.40f, 0.22f)
+    }
+
+    private fun addPalmTree(propB: MeshBuilder, x: Float, z: Float) {
+        propB.addCylinderY(x, 4.2f, z, 0.34f, 0.18f, 8.4f, 6, 0.44f, 0.34f, 0.22f)
+        propB.addBox(x, 8.5f, z, 5.6f, 0.35f, 1.3f, 0.10f, 0.48f, 0.20f)
+        propB.addBox(x, 8.5f, z, 1.3f, 0.35f, 5.6f, 0.10f, 0.48f, 0.20f)
+        propB.addCylinderY(x, 9.0f, z, 1.8f, 0.4f, 1.1f, 6, 0.12f, 0.54f, 0.24f)
+    }
+
+    private fun addPineTree(propB: MeshBuilder, x: Float, baseY: Float, z: Float) {
+        propB.addCylinderY(x, baseY + 2.0f, z, 0.36f, 0.22f, 4.0f, 6, 0.30f, 0.20f, 0.12f)
+        propB.addCylinderY(x, baseY + 5.2f, z, 2.8f, 0.7f, 4.4f, 7, 0.07f, 0.28f, 0.15f)
+        propB.addCylinderY(x, baseY + 8.0f, z, 2.1f, 0.2f, 3.8f, 7, 0.09f, 0.36f, 0.18f)
+    }
+
+    private fun addRepairBayStructure(structB: MeshBuilder, neonB: MeshBuilder, bay: RepairBay) {
+        val baseY = getGroundHeight(bay.x, bay.z)
+        // Drive-through steel service canopy spanning 22m road cleanly (pillars outside roadway)
+        structB.addBox(bay.x - 11.4f, baseY + 3.8f, bay.z, 1.1f, 7.6f, 9.5f, 0.22f, 0.26f, 0.32f)
+        structB.addBox(bay.x + 11.4f, baseY + 3.8f, bay.z, 1.1f, 7.6f, 9.5f, 0.22f, 0.26f, 0.32f)
+        structB.addBox(bay.x, baseY + 7.6f, bay.z, 24.4f, 1.2f, 10.2f, 0.16f, 0.20f, 0.26f)
+        // Glowing emerald neon arch strips + glowing drive-through floor pad + tall beacon
+        neonB.addBox(bay.x, baseY + 8.3f, bay.z, 24.8f, 0.45f, 10.6f, 0.04f, 0.96f, 0.48f)
+        neonB.addBox(bay.x - 10.8f, baseY + 3.8f, bay.z, 0.32f, 7.2f, 0.45f, 0.04f, 0.96f, 0.48f)
+        neonB.addBox(bay.x + 10.8f, baseY + 3.8f, bay.z, 0.32f, 7.2f, 0.45f, 0.04f, 0.96f, 0.48f)
+        // Glowing emerald "+" repair cross sign atop canopy
+        neonB.addBox(bay.x, baseY + 10.8f, bay.z, 4.4f, 1.1f, 0.55f, 0.08f, 1.0f, 0.55f)
+        neonB.addBox(bay.x, baseY + 10.8f, bay.z, 1.1f, 4.4f, 0.55f, 0.08f, 1.0f, 0.55f)
+        // Glowing emerald service floor border
+        neonB.addBox(bay.x, baseY + 0.10f, bay.z - 5.2f, 18.0f, 0.08f, 0.65f, 0.06f, 0.98f, 0.50f)
+        neonB.addBox(bay.x, baseY + 0.10f, bay.z + 5.2f, 18.0f, 0.08f, 0.65f, 0.06f, 0.98f, 0.50f)
     }
 
     private fun addTrafficSignal(propB: MeshBuilder, neonB: MeshBuilder, x: Float, z: Float) {

@@ -73,6 +73,9 @@ interface DrivingVfxListener {
         rightX: Float, rightZ: Float
     )
     fun onCollisionSpark(wx: Float, wy: Float, wz: Float, nx: Float, nz: Float, intensity: Float)
+    fun onCrashDebris(wx: Float, wy: Float, wz: Float, nx: Float, nz: Float, intensity: Float) {}
+    fun onEngineSmoke(wx: Float, wy: Float, wz: Float, carVx: Float, carVz: Float, damageSeverity: Float) {}
+    fun onRepairCompleted() {}
 }
 
 /**
@@ -167,6 +170,88 @@ class VehiclePhysics {
     @Volatile var garageUserOrbitRad: Float = 0f
     @Volatile var launchFlyInProgress: Float = 1f
 
+    // Progressive Car Accident & Damage State (0.10 limp-home floor .. 1.0 pristine)
+    var healthNormalized: Float = 1.0f
+    var frontDamage: Float = 0f
+    var rearDamage: Float = 0f
+    var leftDamage: Float = 0f
+    var rightDamage: Float = 0f
+    var impactFlashAlpha: Float = 0f
+    var repairedNoticeTimer: Float = 0f
+    private var engineSmokeAccum: Float = 0f
+
+    val damageStatusLabel: String
+        get() = when {
+            healthNormalized >= 0.85f -> "INTACT"
+            healthNormalized >= 0.55f -> "DAMAGED"
+            healthNormalized >= 0.28f -> "SMOKING"
+            else -> "CRITICAL"
+        }
+
+    fun repairCar(vfxListener: DrivingVfxListener? = null, showNotice: Boolean = true) {
+        healthNormalized = 1.0f
+        frontDamage = 0f
+        rearDamage = 0f
+        leftDamage = 0f
+        rightDamage = 0f
+        impactFlashAlpha = 0f
+        engineSmokeAccum = 0f
+        if (showNotice) {
+            repairedNoticeTimer = 2.4f
+            vfxListener?.onRepairCompleted()
+        } else {
+            repairedNoticeTimer = 0f
+        }
+    }
+
+    fun registerImpactDamage(
+        contactX: Float,
+        contactZ: Float,
+        nx: Float,
+        nz: Float,
+        impactSpeed: Float,
+        vfxListener: DrivingVfxListener?
+    ) {
+        if (impactSpeed <= 4.2f) return
+        val fwdX = -sin(headingRad)
+        val fwdZ = -cos(headingRad)
+        val rightX = cos(headingRad)
+        val rightZ = -sin(headingRad)
+
+        val relX = contactX - x
+        val relZ = contactZ - z
+        val localFwd = relX * fwdX + relZ * fwdZ
+        val localRight = relX * rightX + relZ * rightZ
+
+        val damageDelta = ((impactSpeed - 4.0f) * 0.0085f).coerceIn(0.025f, 0.28f)
+        healthNormalized = (healthNormalized - damageDelta).coerceAtLeast(0.10f)
+
+        val zoneDelta = (damageDelta * 1.85f).coerceIn(0.05f, 0.45f)
+        if (abs(localFwd) >= abs(localRight)) {
+            if (localFwd >= 0f) {
+                frontDamage = (frontDamage + zoneDelta).coerceAtMost(1.0f)
+                pitchVel += (impactSpeed * 0.45f).coerceAtMost(14f)
+            } else {
+                rearDamage = (rearDamage + zoneDelta).coerceAtMost(1.0f)
+                pitchVel -= (impactSpeed * 0.40f).coerceAtMost(12f)
+            }
+        } else {
+            if (localRight >= 0f) {
+                rightDamage = (rightDamage + zoneDelta).coerceAtMost(1.0f)
+                rollVel -= (impactSpeed * 0.42f).coerceAtMost(12f)
+            } else {
+                leftDamage = (leftDamage + zoneDelta).coerceAtMost(1.0f)
+                rollVel += (impactSpeed * 0.42f).coerceAtMost(12f)
+            }
+        }
+
+        val normImpact = (impactSpeed / 26f).coerceIn(0.24f, 0.96f)
+        impactFlashAlpha = maxOf(impactFlashAlpha, normImpact)
+        if (impactSpeed > 6.5f) {
+            vfxListener?.onCrashDebris(contactX, y, contactZ, nx, nz, normImpact)
+        }
+    }
+
     fun triggerLaunchFlyIn() {
         launchFlyInProgress = 0f
         camX = x + 22f
@@ -236,6 +321,7 @@ class VehiclePhysics {
             spawnHeadingRad = 0f
         }
         resetCarToSpawn()
+        repairCar(vfxListener = null, showNotice = false)
     }
 
     fun resetCarToSpawn() {
@@ -472,7 +558,9 @@ class VehiclePhysics {
         val localLatVel = vx * rightX + vz * rightZ
         forwardSpeedMs = localFwdVel
 
-        val maxSpeedMs = carBuild.effectiveTopSpeedKmh / 3.6f
+        // Progressive mechanical damage penalty (up to 32% top speed & drive power loss at critical damage)
+        val damagePerfMult = 0.68f + 0.32f * healthNormalized.coerceIn(0.10f, 1.0f)
+        val maxSpeedMs = (carBuild.effectiveTopSpeedKmh / 3.6f) * damagePerfMult
         val wantsNitro = input.nitro && nitroNormalized > 0.03f && (input.throttle || localFwdVel > 4f)
         nitroFiring = wantsNitro
         val nitroCapacity = carBuild.effectiveNitroCapacity.coerceAtLeast(0.8f)
@@ -526,7 +614,13 @@ class VehiclePhysics {
         val rawSteer = (if (input.steerLeft) 1f else 0f) - (if (input.steerRight) 1f else 0f)
         val absFwdSpeed = abs(localFwdVel)
         val maxSteerAngle = (0.50f / (1f + absFwdSpeed * 0.015f)).coerceIn(0.18f, 0.50f)
-        val targetSteerRad = rawSteer * maxSteerAngle * steeringSensitivity.coerceIn(0.6f, 1.5f)
+        // Subtle steering alignment drift when heavy asymmetric side damage is sustained
+        val sideImbalance = rightDamage - leftDamage
+        val alignmentPull = if (abs(sideImbalance) > 0.35f && absFwdSpeed > 10f) {
+            sideImbalance * 0.045f * (absFwdSpeed / 40f).coerceAtMost(1f)
+        } else 0f
+        val targetSteerRad = (rawSteer * maxSteerAngle * steeringSensitivity.coerceIn(0.6f, 1.5f) - alignmentPull)
+            .coerceIn(-0.55f, 0.55f)
         val steerRate = 13f * (0.90f + 0.10f * suspStiffness)
         steerVisualRad += (targetSteerRad - steerVisualRad) * (h * steerRate).coerceAtMost(1f)
 
@@ -534,7 +628,7 @@ class VehiclePhysics {
         val torqueCurve = 0.70f + 0.38f * sin(((rpmNormalized).coerceIn(0f, 1f)) * PI * 0.78).toFloat()
         val turboSpoolMult = 1.0f + (carBuild.effectiveTurboSpoolBoost - 1.0f) * rpmNormalized.coerceIn(0.25f, 1.0f)
         val shiftCut = if (shiftTimerSec > 0.04f) 0.35f else 1.0f
-        val baseDriveForce = carBuild.effectiveAcceleration * 590f * torqueCurve * turboSpoolMult * shiftCut * nitroMult
+        val baseDriveForce = carBuild.effectiveAcceleration * 590f * torqueCurve * turboSpoolMult * shiftCut * nitroMult * damagePerfMult
 
         var longForce = 0f
         if (currentGear == -1 && input.brake) {
@@ -726,10 +820,35 @@ class VehiclePhysics {
             }
         }
 
-        // Decay impact shake & evaluate event checkpoints/timer
+        // Decay impact shake, crash HUD flash, repair banner & emit hood engine smoke when damaged
         if (impactShakeIntensity > 0f) {
             impactShakeIntensity = (impactShakeIntensity - h * 2.8f).coerceAtLeast(0f)
         }
+        if (impactFlashAlpha > 0f) {
+            impactFlashAlpha = (impactFlashAlpha - h * 2.1f).coerceAtLeast(0f)
+        }
+        if (repairedNoticeTimer > 0f) {
+            repairedNoticeTimer = (repairedNoticeTimer - h).coerceAtLeast(0f)
+        }
+
+        // Emit rising engine hood smoke below 55% chassis integrity (denser/darker below 28%)
+        if (healthNormalized < 0.55f) {
+            val smokeSeverity = ((0.55f - healthNormalized) / 0.45f).coerceIn(0.1f, 1.0f)
+            val interval = (0.14f - smokeSeverity * 0.085f).coerceAtLeast(0.045f)
+            engineSmokeAccum += h
+            if (engineSmokeAccum >= interval) {
+                engineSmokeAccum = 0f
+                val hoodX = x + nFwdX * (carBuild.spec.bodyLength * 0.32f)
+                val hoodZ = z + nFwdZ * (carBuild.spec.bodyLength * 0.32f)
+                vfxListener?.onEngineSmoke(hoodX, y, hoodZ, vx, vz, smokeSeverity)
+            }
+        }
+
+        // Auto-repair to 100% integrity when driving through any glowing emerald Repair Bay
+        if (healthNormalized < 0.99f && CityWorld.findRepairBay(x, z) != null) {
+            repairCar(vfxListener = vfxListener, showNotice = true)
+        }
+
         evaluateEventProgress(currentRacePosition, totalRacers, onRaceFinished)
         updateGameplayCamera(h, cameraMode, wantsNitro, nFwdX, nFwdZ)
     }
@@ -775,6 +894,7 @@ class VehiclePhysics {
                     val normImpact = (impactSpeed / 32f).coerceIn(0.2f, 1.0f)
                     impactShakeIntensity = maxOf(impactShakeIntensity, normImpact)
                     vfxListener?.onCollisionSpark(contactX, y, contactZ, nx, nz, normImpact)
+                    registerImpactDamage(contactX, contactZ, nx, nz, impactSpeed, vfxListener)
                 }
             }
         }
@@ -1072,6 +1192,14 @@ class VehiclePhysics {
             roadWetness = roadWetness,
             collisionIntensity = impactShakeIntensity,
             avgSuspensionCompression = avgComp,
+            healthNormalized = healthNormalized,
+            frontDamage = frontDamage,
+            rearDamage = rearDamage,
+            leftDamage = leftDamage,
+            rightDamage = rightDamage,
+            impactFlashAlpha = impactFlashAlpha,
+            damageStatusLabel = damageStatusLabel,
+            repairedNoticeActive = repairedNoticeTimer > 0f,
             fps = fps
         )
     }

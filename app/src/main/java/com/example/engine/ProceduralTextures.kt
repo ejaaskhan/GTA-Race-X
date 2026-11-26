@@ -59,13 +59,13 @@ class ProceduralTextures {
             canvas.drawRect(laneCenter + 8f, 0f, laneCenter + 26f, size.toFloat(), paint)
         }
 
-        // Layered asphalt mineral aggregate + micro wet sheen patches
-        for (i in 0 until 5200) {
+        // Layered asphalt mineral aggregate + micro wet sheen patches (fast startup count)
+        for (i in 0 until 1800) {
             val x = rng.nextFloat() * size
             val y = rng.nextFloat() * size
             val shade = rng.nextInt(16, 48)
             paint.color = Color.rgb(shade, shade + 2, shade + 6)
-            val s = 1.6f + rng.nextFloat() * 2.2f
+            val s = 2.0f + rng.nextFloat() * 2.6f
             canvas.drawRect(x, y, x + s, y + s, paint)
         }
 

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -223,7 +224,37 @@ fun SplashOverlay(
                     .graphicsLayer { alpha = taglineAlpha.value }
             )
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Box(
+                modifier = Modifier
+                    .graphicsLayer { alpha = taglineAlpha.value }
+                    .background(
+                        color = GraphiteSurface.copy(alpha = 0.78f),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.horizontalGradient(
+                            listOf(NitroCyan.copy(alpha = 0.7f), RacingCrimson.copy(alpha = 0.85f))
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+            ) {
+                Text(
+                    text = stringResource(R.string.splash_creator_credit),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = TextPrimary,
+                    modifier = Modifier
+                        .padding(horizontal = 18.dp, vertical = 6.dp)
+                        .testTag("splash_creator_credit")
+                )
+            }
+
+            Spacer(modifier = Modifier.height(26.dp))
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

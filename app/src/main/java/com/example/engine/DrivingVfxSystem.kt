@@ -19,6 +19,8 @@ class DrivingVfxSystem {
 
     private enum class ParticleKind {
         SMOKE,
+        ENGINE_SMOKE,
+        DEBRIS,
         SPARK,
         NITRO_FLAME
     }
@@ -124,6 +126,18 @@ class DrivingVfxSystem {
         return count
     }
 
+    fun activeEngineSmokeCount(): Int {
+        var count = 0
+        for (p in particles) if (p.active && p.kind == ParticleKind.ENGINE_SMOKE) count++
+        return count
+    }
+
+    fun activeDebrisCount(): Int {
+        var count = 0
+        for (p in particles) if (p.active && p.kind == ParticleKind.DEBRIS) count++
+        return count
+    }
+
     private fun acquireParticle(): Particle {
         val cap = particleBudget.coerceIn(24, MAX_PARTICLES)
         if (nextParticleIdx >= cap) nextParticleIdx = 0
@@ -195,6 +209,74 @@ class DrivingVfxSystem {
         }
     }
 
+    /** Emits rising hood engine smoke when chassis health drops below 55% (darker soot + glowing embers under 28%). */
+    fun emitEngineSmoke(wx: Float, wy: Float, wz: Float, carVx: Float, carVz: Float, damageSeverity: Float) {
+        val sev = damageSeverity.coerceIn(0f, 1f)
+        val p = acquireParticle()
+        p.active = true
+        p.kind = ParticleKind.ENGINE_SMOKE
+        p.x = wx + (rng.nextFloat() - 0.5f) * 0.45f
+        p.y = wy + 0.85f
+        p.z = wz + (rng.nextFloat() - 0.5f) * 0.45f
+        p.vx = carVx * 0.25f + (rng.nextFloat() - 0.5f) * 1.4f
+        p.vy = 2.0f + rng.nextFloat() * 1.6f + sev * 1.1f
+        p.vz = carVz * 0.25f + (rng.nextFloat() - 0.5f) * 1.4f
+        p.size = 0.46f + rng.nextFloat() * 0.28f + sev * 0.22f
+        p.age = 0f
+        p.maxAge = 0.72f + rng.nextFloat() * 0.38f
+        // Transitions from light grey steam to dense dark engine oil soot at critical damage
+        val shade = (0.58f - sev * 0.42f).coerceIn(0.12f, 0.62f)
+        p.r = shade + if (sev > 0.72f) 0.06f else 0f
+        p.g = shade
+        p.b = shade + 0.02f
+
+        // Occasional hot orange engine ember spark when critically damaged
+        if (sev > 0.72f && rng.nextFloat() < 0.35f) {
+            val em = acquireParticle()
+            em.active = true
+            em.kind = ParticleKind.SPARK
+            em.x = wx + (rng.nextFloat() - 0.5f) * 0.35f
+            em.y = wy + 0.90f
+            em.z = wz + (rng.nextFloat() - 0.5f) * 0.35f
+            em.vx = carVx * 0.3f + (rng.nextFloat() - 0.5f) * 3.5f
+            em.vy = 2.4f + rng.nextFloat() * 3.0f
+            em.vz = carVz * 0.3f + (rng.nextFloat() - 0.5f) * 3.5f
+            em.size = 0.14f + rng.nextFloat() * 0.08f
+            em.age = 0f
+            em.maxAge = 0.28f + rng.nextFloat() * 0.16f
+            em.r = 1.0f
+            em.g = 0.38f + rng.nextFloat() * 0.32f
+            em.b = 0.06f
+        }
+    }
+
+    /** Emits tumbling metallic & painted body fragments on heavy high-speed accidents. */
+    fun emitCrashDebris(wx: Float, wy: Float, wz: Float, nx: Float, nz: Float, intensity: Float) {
+        val maxShards = if (particleBudget <= 48) 4 else 9
+        val count = (3 + (intensity * 6f).toInt()).coerceIn(3, maxShards)
+        for (i in 0 until count) {
+            val p = acquireParticle()
+            p.active = true
+            p.kind = ParticleKind.DEBRIS
+            p.x = wx + (rng.nextFloat() - 0.5f) * 0.6f
+            p.y = wy + 0.55f + rng.nextFloat() * 0.45f
+            p.z = wz + (rng.nextFloat() - 0.5f) * 0.6f
+            val spread = 4.5f + intensity * 8.5f
+            p.vx = nx * (2.5f + rng.nextFloat() * spread) + (rng.nextFloat() - 0.5f) * spread
+            p.vy = 3.5f + rng.nextFloat() * 5.5f
+            p.vz = nz * (2.5f + rng.nextFloat() * spread) + (rng.nextFloat() - 0.5f) * spread
+            p.size = 0.16f + rng.nextFloat() * 0.14f
+            p.age = 0f
+            p.maxAge = 0.65f + rng.nextFloat() * 0.45f
+            // Mix of dark carbon, brushed silver, and crimson painted shards
+            when (i % 3) {
+                0 -> { p.r = 0.16f; p.g = 0.18f; p.b = 0.22f }
+                1 -> { p.r = 0.72f; p.g = 0.76f; p.b = 0.82f }
+                else -> { p.r = 0.88f; p.g = 0.16f; p.b = 0.18f }
+            }
+        }
+    }
+
     fun emitSkidMark(
         prevX: Float, prevY: Float, prevZ: Float,
         currX: Float, currY: Float, currZ: Float,
@@ -225,15 +307,24 @@ class DrivingVfxSystem {
             p.z += p.vz * dt
             when (p.kind) {
                 ParticleKind.SPARK -> p.vy -= 18f * dt
+                ParticleKind.DEBRIS -> {
+                    p.vy -= 19.5f * dt
+                    if (p.y < 0.12f) {
+                        p.y = 0.12f
+                        p.vy = -p.vy * 0.42f
+                        p.vx *= 0.75f
+                        p.vz *= 0.75f
+                    }
+                }
                 ParticleKind.NITRO_FLAME -> {
                     p.vx *= (1f - dt * 4.0f)
                     p.vz *= (1f - dt * 4.0f)
                     p.size += dt * 1.15f
                 }
-                ParticleKind.SMOKE -> {
+                ParticleKind.SMOKE, ParticleKind.ENGINE_SMOKE -> {
                     p.vx *= (1f - dt * 1.8f)
                     p.vz *= (1f - dt * 1.8f)
-                    p.size += dt * 1.45f
+                    p.size += dt * 1.55f
                 }
             }
         }
@@ -281,10 +372,10 @@ class DrivingVfxSystem {
             drawDynamicBatch(vFloats)
         }
 
-        // Pass 2: Tire Drift Smoke & Wet Spray (batched single draw call)
+        // Pass 2: Tire Drift Smoke, Engine Hood Smoke & Wet Spray (batched single draw call)
         vFloats = 0
         for (p in particles) {
-            if (!p.active || p.kind != ParticleKind.SMOKE) continue
+            if (!p.active || (p.kind != ParticleKind.SMOKE && p.kind != ParticleKind.ENGINE_SMOKE)) continue
             val life = (1f - p.age / p.maxAge).coerceIn(0f, 1f)
             val hs = p.size * 0.5f
             vFloats = putQuad(
@@ -298,14 +389,34 @@ class DrivingVfxSystem {
         }
         if (vFloats > 0) {
             GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-            GLES30.glUniform1f(uAlpha, 0.42f)
+            GLES30.glUniform1f(uAlpha, 0.48f)
+            drawDynamicBatch(vFloats)
+        }
+
+        // Pass 2B: Opaque Tumbling Crash Debris Shards (batched single draw call)
+        vFloats = 0
+        for (p in particles) {
+            if (!p.active || p.kind != ParticleKind.DEBRIS) continue
+            val hs = p.size * 0.5f
+            vFloats = putQuad(
+                vFloats,
+                p.x - rightX * hs, p.y - hs * 0.7f, p.z - rightZ * hs,
+                p.x + rightX * hs, p.y - hs * 0.7f, p.z + rightZ * hs,
+                p.x + rightX * hs, p.y + hs * 0.7f, p.z + rightZ * hs,
+                p.x - rightX * hs, p.y + hs * 0.7f, p.z - rightZ * hs,
+                p.r, p.g, p.b
+            )
+        }
+        if (vFloats > 0) {
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glUniform1f(uAlpha, 0.94f)
             drawDynamicBatch(vFloats)
         }
 
         // Pass 3: Additive Glowing Collision Sparks & Nitro Exhaust Flame Trails (batched single draw call!)
         vFloats = 0
         for (p in particles) {
-            if (!p.active || p.kind == ParticleKind.SMOKE) continue
+            if (!p.active || (p.kind != ParticleKind.SPARK && p.kind != ParticleKind.NITRO_FLAME)) continue
             val life = (1f - p.age / p.maxAge).coerceIn(0f, 1f)
             val hs = p.size * 0.5f
             vFloats = putQuad(

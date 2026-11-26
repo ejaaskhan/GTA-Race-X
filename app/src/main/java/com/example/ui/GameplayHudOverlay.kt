@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -65,7 +66,6 @@ import com.example.data.GameMode
 import com.example.data.MedalTier
 import com.example.data.RaceResult
 import com.example.data.TelemetrySnapshot
-import com.example.engine.CityWorld
 import com.example.engine.ControlInput
 import com.example.ui.theme.BronzeMedal
 import com.example.ui.theme.CarbonBorder
@@ -82,8 +82,6 @@ import com.example.ui.theme.StatEmerald
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Composable
 fun GameplayHudOverlay(
@@ -94,32 +92,61 @@ fun GameplayHudOverlay(
     onCycleCamera: () -> Unit,
     onRecoverCar: () -> Unit,
     onRestart: () -> Unit,
-    onExitToMenu: () -> Unit
+    onExitToMenu: () -> Unit,
+    onRepairCar: () -> Unit = {}
 ) {
+    var showFullMap by remember { mutableStateOf(false) }
+
     BackHandler {
-        if (state.lastRaceResult != null) {
-            onExitToMenu()
-        } else {
-            onTogglePause()
+        when {
+            showFullMap -> showFullMap = false
+            state.lastRaceResult != null -> onExitToMenu()
+            else -> onTogglePause()
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
-        // TOP-LEFT: Live Mini-Map Radar + District, Camera & FPS Pill
-        Column(
-            modifier = Modifier.align(Alignment.TopStart),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Full-screen non-blocking crimson crash impact flash vignette
+        if (telemetry.impactFlashAlpha > 0.02f) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("hud_impact_flash")
+            ) {
+                val alpha = (telemetry.impactFlashAlpha * 0.55f).coerceIn(0f, 0.58f)
+                val borderStroke = size.minDimension * 0.085f
+                drawRect(
+                    color = RacingCrimson.copy(alpha = alpha),
+                    style = Stroke(width = borderStroke)
+                )
+                drawRect(
+                    color = RacingCrimson.copy(alpha = alpha * 0.22f)
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
+            // TOP-LEFT: Realistic Rotating GTA-Style GPS Mini-Map + District/Weather/Camera Pills & Chassis Bar
+            Column(
+                modifier = Modifier.align(Alignment.TopStart),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
             Row(
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                MiniMapRadar(telemetry = telemetry)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    GpsMiniMap(
+                        telemetry = telemetry,
+                        onExpandMap = { showFullMap = true }
+                    )
+                    ChassisDamageHudCard(telemetry = telemetry)
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Surface(
                         color = CarbonDark.copy(alpha = 0.78f),
@@ -271,6 +298,23 @@ fun GameplayHudOverlay(
                     )
                 }
             }
+
+            if (telemetry.repairedNoticeActive) {
+                Surface(
+                    color = StatEmerald.copy(alpha = 0.22f),
+                    border = BorderStroke(1.5.dp, StatEmerald),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        text = "REPAIR BAY • 100% INTEGRITY",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = StatEmerald,
+                        modifier = Modifier
+                            .padding(horizontal = 14.dp, vertical = 4.dp)
+                            .testTag("hud_repaired_notice")
+                    )
+                }
+            }
         }
 
         // CENTER: 3 - 2 - 1 - GO! Motorsport Starting Lights Countdown
@@ -309,11 +353,20 @@ fun GameplayHudOverlay(
             }
         }
 
-        // TOP-RIGHT: Camera Switch, Reset Car, and Pause Buttons
+        // TOP-RIGHT: Quick Repair, Camera Switch, Reset Car, and Pause Buttons
         Row(
             modifier = Modifier.align(Alignment.TopEnd),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val isDamaged = telemetry.healthNormalized < 0.99f
+            HudIconButton(
+                icon = Icons.Filled.Build,
+                contentDesc = stringResource(R.string.hud_repair),
+                tag = "hud_repair_button",
+                accentColor = if (isDamaged) StatEmerald else CarbonBorder,
+                iconTint = if (isDamaged) StatEmerald else TextPrimary,
+                onClick = onRepairCar
+            )
             HudIconButton(
                 icon = Icons.Filled.Videocam,
                 contentDesc = "Switch Camera (${state.settings.cameraMode.label})",
@@ -415,6 +468,15 @@ fun GameplayHudOverlay(
                 )
             }
         }
+        }
+    }
+
+    // Interactive Full Satellite World Map Overlay (opened by tapping the GPS Mini-Map)
+    if (showFullMap && !state.paused && state.lastRaceResult == null) {
+        FullWorldMapModal(
+            telemetry = telemetry,
+            onDismiss = { showFullMap = false }
+        )
     }
 
     // Pause Overlay Modal
@@ -639,72 +701,90 @@ private fun SpeedometerCluster(
 }
 
 @Composable
-private fun MiniMapRadar(telemetry: TelemetrySnapshot) {
+private fun ChassisDamageHudCard(telemetry: TelemetrySnapshot) {
+    val healthPct = (telemetry.healthNormalized.coerceIn(0f, 1f) * 100f).toInt()
+    val statusColor = when {
+        telemetry.healthNormalized >= 0.70f -> StatEmerald
+        telemetry.healthNormalized >= 0.38f -> ChampionshipGold
+        else -> RacingCrimson
+    }
+
+    fun zoneColor(zoneDmg: Float): Color = when {
+        zoneDmg >= 0.65f -> RacingCrimson
+        zoneDmg >= 0.25f -> ChampionshipGold
+        else -> StatEmerald
+    }
+
     Surface(
-        color = ObsidianBlack.copy(alpha = 0.86f),
-        border = BorderStroke(1.5.dp, CarbonBorder),
-        shape = RoundedCornerShape(10.dp),
+        color = CarbonDark.copy(alpha = 0.84f),
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.78f)),
+        shape = RoundedCornerShape(7.dp),
         modifier = Modifier
-            .size(96.dp)
-            .testTag("hud_minimap_radar")
+            .width(146.dp)
+            .testTag("hud_health_bar")
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
-            val scale = size.width / (CityWorld.WORLD_HALF * 2.05f)
-            val cx = size.width * 0.5f
-            val cy = size.height * 0.5f
-
-            fun mapX(wx: Float) = cx + wx * scale
-            fun mapY(wz: Float) = cy + wz * scale
-
-            // City road grid (Highway in crimson, Suspension Bridge in cyan)
-            for (c in CityWorld.AVENUE_COORDS) {
-                val roadCol = if (c == CityWorld.SKYWAY_X) RacingCrimson.copy(alpha = 0.65f) else Color(0xFF39445A)
-                drawLine(roadCol, Offset(mapX(c), mapY(-360f)), Offset(mapX(c), mapY(360f)), strokeWidth = 2.5f)
-                val rowCol = if (c == CityWorld.BRIDGE_Z) NitroCyan.copy(alpha = 0.7f) else Color(0xFF39445A)
-                drawLine(rowCol, Offset(mapX(-360f), mapY(c)), Offset(mapX(360f), mapY(c)), strokeWidth = 2.5f)
-            }
-
-            // Nearby AI traffic blips (soft amber) & AI street race rivals (bright cyan)
-            for (blip in telemetry.radarBlips) {
-                val bx = mapX(blip.x)
-                val by = mapY(blip.z)
-                if (blip.isRival) {
-                    drawCircle(color = TextPrimary, radius = 4.2f, center = Offset(bx, by))
-                    drawCircle(color = NitroCyan, radius = 3.0f, center = Offset(bx, by))
-                } else {
-                    drawCircle(color = ChampionshipGold.copy(alpha = 0.55f), radius = 2.0f, center = Offset(bx, by))
-                }
-            }
-
-            // Next active checkpoint / finish target
-            val cpX = telemetry.nextCheckpointX
-            val cpZ = telemetry.nextCheckpointZ
-            if (cpX != null && cpZ != null) {
-                drawCircle(
-                    color = ChampionshipGold,
-                    radius = 5.5f,
-                    center = Offset(mapX(cpX), mapY(cpZ))
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = telemetry.damageStatusLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                    modifier = Modifier.testTag("hud_damage_status_label")
+                )
+                Text(
+                    text = "$healthPct%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextPrimary,
+                    modifier = Modifier.testTag("hud_health_pct_text")
                 )
             }
-
-            // Player directional chevron
-            val px = mapX(telemetry.carX)
-            val py = mapY(telemetry.carZ)
-            val fx = -sin(telemetry.carHeadingRad)
-            val fz = -cos(telemetry.carHeadingRad)
-            val rx = cos(telemetry.carHeadingRad)
-            val rz = -sin(telemetry.carHeadingRad)
-            val tip = Offset(px + fx * 8f, py + fz * 8f)
-            val left = Offset(px - fx * 5f - rx * 4.5f, py - fz * 5f - rz * 4.5f)
-            val right = Offset(px - fx * 5f + rx * 4.5f, py - fz * 5f + rz * 4.5f)
-            val path = Path().apply {
-                moveTo(tip.x, tip.y)
-                lineTo(left.x, left.y)
-                lineTo(right.x, right.y)
-                close()
+            LinearProgressIndicator(
+                progress = { telemetry.healthNormalized.coerceIn(0f, 1f) },
+                color = statusColor,
+                trackColor = GraphiteElevated,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DamageZoneBadge("F", zoneColor(telemetry.frontDamage))
+                DamageZoneBadge("R", zoneColor(telemetry.rearDamage))
+                DamageZoneBadge("L", zoneColor(telemetry.leftDamage))
+                DamageZoneBadge("RT", zoneColor(telemetry.rightDamage))
             }
-            drawPath(path, color = RacingCrimson)
         }
+    }
+}
+
+@Composable
+private fun DamageZoneBadge(code: String, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = code,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextSecondary
+        )
     }
 }
 
@@ -720,11 +800,13 @@ private fun HudIconButton(
     icon: ImageVector,
     contentDesc: String,
     tag: String,
+    accentColor: Color = CarbonBorder,
+    iconTint: Color = TextPrimary,
     onClick: () -> Unit
 ) {
     Surface(
         color = CarbonDark.copy(alpha = 0.80f),
-        border = BorderStroke(1.dp, CarbonBorder),
+        border = BorderStroke(1.dp, accentColor),
         shape = CircleShape
     ) {
         IconButton(
@@ -733,7 +815,7 @@ private fun HudIconButton(
                 .size(48.dp)
                 .testTag(tag)
         ) {
-            Icon(icon, contentDescription = contentDesc, tint = TextPrimary)
+            Icon(icon, contentDescription = contentDesc, tint = iconTint)
         }
     }
 }

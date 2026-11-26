@@ -56,6 +56,8 @@ class GameRenderer(
     private var showroomStage: ShowroomStageMeshes? = null
     private val vfxSystem = DrivingVfxSystem()
     private val carMeshesCache = mutableMapOf<String, CarMeshes>()
+    private var glInitStage: Int = 0
+    private var nextCarWarmupIndex: Int = 0
 
     private val vfxListener = object : DrivingVfxListener {
         override fun onTireSmoke(wx: Float, wy: Float, wz: Float, carVx: Float, carVz: Float) {
@@ -74,6 +76,18 @@ class GameRenderer(
             vfxSystem.emitCollisionSparks(wx, wy, wz, nx, nz, intensity)
             audioSynthesizer.triggerCollision(intensity)
         }
+
+        override fun onCrashDebris(wx: Float, wy: Float, wz: Float, nx: Float, nz: Float, intensity: Float) {
+            vfxSystem.emitCrashDebris(wx, wy, wz, nx, nz, intensity)
+        }
+
+        override fun onEngineSmoke(wx: Float, wy: Float, wz: Float, carVx: Float, carVz: Float, damageSeverity: Float) {
+            vfxSystem.emitEngineSmoke(wx, wy, wz, carVx, carVz, damageSeverity)
+        }
+
+        override fun onRepairCompleted() {
+            audioSynthesizer.triggerUiSound(UiSoundType.UNLOCK)
+        }
     }
 
     private val projMatrix = FloatArray(16)
@@ -84,10 +98,10 @@ class GameRenderer(
     private val wheelMatrix = FloatArray(16)
     private val chassisMatrix = FloatArray(16)
 
-    // Pre-allocated zero-GC scratch containers for per-frame culling & telemetry
-    private val visibleChunksScratch = ArrayList<CityChunk>(32)
-    private val visibleChunkDistsScratch = FloatArray(64)
-    private val radarBlipsScratch = ArrayList<RadarBlip>(32)
+    // Pre-allocated zero-GC scratch containers for per-frame culling & telemetry (expanded world)
+    private val visibleChunksScratch = ArrayList<CityChunk>(96)
+    private val visibleChunkDistsScratch = FloatArray(96)
+    private val radarBlipsScratch = ArrayList<RadarBlip>(48)
     private val rgbScratch = FloatArray(3)
     private val wheelSignX = floatArrayOf(-1f, 1f, -1f, 1f)
     private val wheelSignZ = floatArrayOf(-1f, -1f, 1f, 1f)
@@ -151,6 +165,12 @@ class GameRenderer(
         }
     }
 
+    fun repairCar() {
+        enqueue {
+            physics.repairCar(vfxListener = vfxListener, showNotice = true)
+        }
+    }
+
     fun triggerLaunchFlyIn() {
         enqueue {
             physics.triggerLaunchFlyIn()
@@ -166,25 +186,38 @@ class GameRenderer(
             litShader = null
             unlitShader = null
             textures = null
+            cityWorld = null
+            showroomStage = null
+            carMeshesCache.clear()
+            glInitStage = 0
+            nextCarWarmupIndex = 0
         }
     }
 
+    private fun getOrBuildCarMesh(carId: String): CarMeshes {
+        carMeshesCache[carId]?.let { return it }
+        val spec = GameCatalog.carById(carId)
+        val built = CarMeshFactory.buildCar(spec)
+        carMeshesCache[spec.id] = built
+        return built
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // Keep onSurfaceCreated ultra-fast (<5ms) so Android's SurfaceSyncGroup receives
+        // the first SurfaceView frame transaction well within its 1000ms budget.
         GLES30.glClearColor(environment.skyR, environment.skyG, environment.skyB, 1.0f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
         GLES30.glDisable(GLES30.GL_CULL_FACE)
 
-        litShader = LitShaderProgram()
-        unlitShader = UnlitOverlayShader()
-        textures = ProceduralTextures()
-        cityWorld = CityWorld()
-        showroomStage = CarMeshFactory.buildShowroomStage()
-        vfxSystem.initGl()
+        litShader = null
+        unlitShader = null
+        textures = null
+        cityWorld = null
+        showroomStage = null
         carMeshesCache.clear()
-        for (spec in GameCatalog.cars) {
-            carMeshesCache[spec.id] = CarMeshFactory.buildCar(spec)
-        }
+        glInitStage = 0
+        nextCarWarmupIndex = 0
         lastFrameNanos = System.nanoTime()
     }
 
@@ -213,6 +246,48 @@ class GameRenderer(
         while (true) {
             val action = pendingActions.poll() ?: break
             action()
+        }
+
+        // Staged progressive GL resource initialization so Frame 0 completes immediately (<15ms)
+        // and each subsequent warmup frame stays short behind the launch splash screen.
+        if (glInitStage < 5) {
+            GLES30.glClearColor(0.04f, 0.05f, 0.08f, 1.0f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+            when (glInitStage) {
+                0 -> {
+                    // Frame 0: Commit first clean swap immediately for SurfaceSyncGroup!
+                    glInitStage = 1
+                }
+                1 -> {
+                    litShader = LitShaderProgram()
+                    unlitShader = UnlitOverlayShader()
+                    vfxSystem.initGl()
+                    glInitStage = 2
+                }
+                2 -> {
+                    textures = ProceduralTextures()
+                    glInitStage = 3
+                }
+                3 -> {
+                    showroomStage = CarMeshFactory.buildShowroomStage()
+                    getOrBuildCarMesh(activeCarBuild.spec.id)
+                    glInitStage = 4
+                }
+                4 -> {
+                    cityWorld = CityWorld()
+                    glInitStage = 5
+                }
+            }
+            lastFrameNanos = System.nanoTime()
+            return
+        }
+
+        // Warm up remaining car classes 1 per frame without stalling the main scene
+        if (nextCarWarmupIndex < GameCatalog.cars.size) {
+            val spec = GameCatalog.cars[nextCarWarmupIndex++]
+            if (!carMeshesCache.containsKey(spec.id)) {
+                carMeshesCache[spec.id] = CarMeshFactory.buildCar(spec)
+            }
         }
 
         val world = cityWorld ?: return
@@ -316,12 +391,15 @@ class GameRenderer(
         audioSynthesizer.drifting = physics.drifting || (physics.handbrakeActive && physics.speedMs > 5f)
         audioSynthesizer.activeRacing = (physics.screenMode == GameScreen.RACING && !physics.paused && !physics.eventFinished)
 
-        // 4. Publish live telemetry + radar blips to Compose HUD at ~20 Hz (using reusable scratch list)
+        // 4. Publish live telemetry + radar blips (rivals, traffic, and 4 glowing repair bays) at ~20 Hz
         if (now - lastTelemetryNanos >= 48_000_000L) {
             lastTelemetryNanos = now
             radarBlipsScratch.clear()
+            for (bay in CityWorld.REPAIR_BAYS) {
+                radarBlipsScratch.add(RadarBlip(bay.x, bay.z, isRival = false, isRepairBay = true))
+            }
             aiRacerSystem.collectRivalBlips(radarBlipsScratch)
-            trafficSystem.collectNearbyBlips(physics.x, physics.z, 260f, radarBlipsScratch)
+            trafficSystem.collectNearbyBlips(physics.x, physics.z, 280f, radarBlipsScratch)
             onTelemetryUpdate(
                 physics.buildTelemetry(
                     fps = currentFps,
@@ -366,6 +444,7 @@ class GameRenderer(
 
         // Bind lit shader + dynamic atmosphere & lighting uniforms
         shader.use()
+        GLES30.glUniform1f(shader.uDamageFactor, 0f)
         GLES30.glUniform3f(shader.uCameraPos, physics.camX, physics.camY, physics.camZ)
         GLES30.glUniform3f(shader.uFogColor, environment.fogR, environment.fogG, environment.fogB)
         val baseFogDensity = when (quality) {
@@ -382,12 +461,17 @@ class GameRenderer(
         GLES30.glUniform1f(shader.uNightFactor, environment.nightFactor)
         GLES30.glUniform1f(shader.uReflectionStrength, quality.reflectionStrength)
 
-        // Dynamic car headlights position & forward aim
+        // Dynamic car headlights position, forward aim & electrical flicker on heavy front crash
         val fwdX = -sin(physics.headingRad)
         val fwdZ = -cos(physics.headingRad)
+        val headlightFlicker = if (physics.screenMode == GameScreen.RACING && physics.frontDamage > 0.50f) {
+            if (sin(animTimeSec * 37f) > -0.35f) 0.55f else 0.12f
+        } else {
+            1.0f
+        }
         GLES30.glUniform3f(shader.uHeadlightPos, physics.x + fwdX * 1.9f, physics.y + 0.72f, physics.z + fwdZ * 1.9f)
         GLES30.glUniform3f(shader.uHeadlightDir, fwdX, -0.10f, fwdZ)
-        GLES30.glUniform1f(shader.uHeadlightPower, environment.headlightPower)
+        GLES30.glUniform1f(shader.uHeadlightPower, environment.headlightPower * headlightFlicker)
 
         // Identity world matrix for static city meshes
         Matrix.setIdentityM(modelMatrix, 0)
@@ -507,7 +591,7 @@ class GameRenderer(
         }
 
         // J. Render Active Player Sports Car + 4 Independently Suspended, Rotating & Steering Wheels
-        val carMeshes = carMeshesCache[carBuild.spec.id] ?: carMeshesCache.values.first()
+        val carMeshes = getOrBuildCarMesh(carBuild.spec.id)
         renderPlayerCar(shader, unlit, tex, carMeshes, carBuild, quality.shadowEnabled)
 
         // K. Render 3D Start Line Gantry, Checkered Finish Line Gantry & Active Checkpoint Beacon
@@ -566,6 +650,7 @@ class GameRenderer(
         lodDetailDist: Float
     ) {
         shader.use()
+        GLES30.glUniform1f(shader.uDamageFactor, 0f)
         GLES30.glUniform1i(shader.uUseTexture, 0)
         GLES30.glUniform1f(shader.uWetRoadSpec, 0f)
 
@@ -625,7 +710,7 @@ class GameRenderer(
         for (r in aiRacerSystem.racers) {
             if (!r.active) continue
             val dist = hypot(r.x - physics.camX, r.z - physics.camZ)
-            val car = carMeshesCache[r.carId] ?: carMeshesCache.values.first()
+            val car = getOrBuildCarMesh(r.carId)
             val headingDeg = Math.toDegrees(r.headingRad.toDouble()).toFloat()
 
             Matrix.setIdentityM(modelMatrix, 0)
@@ -646,6 +731,7 @@ class GameRenderer(
             }
 
             shader.use()
+            GLES30.glUniform1f(shader.uDamageFactor, 0f)
             GLES30.glUniform1i(shader.uUseTexture, 0)
             GLES30.glUniform1f(shader.uWetRoadSpec, 0f)
             Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)
@@ -811,8 +897,16 @@ class GameRenderer(
         GLES30.glUniformMatrix4fv(shader.uMvpMatrix, 1, false, mvpMatrix, 0)
         GLES30.glUniform1i(shader.uUseTexture, 0)
 
-        // 1. Metallic Car Paint Body
+        // Progressive chassis damage wear (scuffs, carbon soot, clearcoat dulling) — pristine in Garage showroom
+        val damageFactor = if (physics.screenMode == GameScreen.GARAGE) {
+            0f
+        } else {
+            (1f - physics.healthNormalized).coerceIn(0f, 1f)
+        }
+
+        // 1. Metallic Car Paint Body (with live progressive wear shader)
         val paintRgb = parseHexRgb(build.paintHex)
+        GLES30.glUniform1f(shader.uDamageFactor, damageFactor)
         GLES30.glUniform3f(shader.uTintColor, paintRgb[0], paintRgb[1], paintRgb[2])
         GLES30.glUniform1f(shader.uMetallic, 0.88f)
         GLES30.glUniform1f(shader.uRoughness, 0.14f)
@@ -821,6 +915,7 @@ class GameRenderer(
 
         // 2. Live Customized Window Tint Greenhouse Glass
         val tint = build.windowTint
+        GLES30.glUniform1f(shader.uDamageFactor, 0f)
         GLES30.glUniform3f(shader.uTintColor, tint.r, tint.g, tint.b)
         GLES30.glUniform1f(shader.uMetallic, tint.metallic)
         GLES30.glUniform1f(shader.uRoughness, tint.roughness)
@@ -828,6 +923,7 @@ class GameRenderer(
         car.windowsMesh.draw()
 
         // 3. Carbon Trim + Selected 3D Body Kit + Selected 3D Spoiler
+        GLES30.glUniform1f(shader.uDamageFactor, damageFactor * 0.85f)
         GLES30.glUniform3f(shader.uTintColor, 1f, 1f, 1f)
         GLES30.glUniform1f(shader.uMetallic, 0.65f)
         GLES30.glUniform1f(shader.uRoughness, 0.22f)
@@ -836,10 +932,17 @@ class GameRenderer(
         car.bodyKitMeshes[build.bodyKitStyle]?.draw()
         car.spoilerMeshes[build.spoilerStyle]?.draw()
 
-        // 4. Live Customized Emissive Headlights
+        // 4. Live Customized Emissive Headlights (flickers after severe frontal collision)
+        GLES30.glUniform1f(shader.uDamageFactor, 0f)
         val hl = build.headlightStyle
+        val frontFlicker = if (physics.screenMode == GameScreen.RACING && physics.frontDamage > 0.50f) {
+            if (sin(animTimeSec * 37f) > -0.35f) 0.55f else 0.12f
+        } else {
+            1.0f
+        }
         GLES30.glUniform3f(shader.uTintColor, hl.r, hl.g, hl.b)
-        GLES30.glUniform1f(shader.uEmissive, if (physics.screenMode == GameScreen.GARAGE) 2.2f else (1.4f + 1.1f * environment.nightFactor))
+        val baseHeadlightEmissive = if (physics.screenMode == GameScreen.GARAGE) 2.2f else (1.4f + 1.1f * environment.nightFactor)
+        GLES30.glUniform1f(shader.uEmissive, baseHeadlightEmissive * frontFlicker)
         car.headlightsMesh.draw()
 
         // 5. Emissive Crimson Taillights
@@ -926,9 +1029,10 @@ class GameRenderer(
         carBuild: ActiveCarBuild
     ) {
         val stage = showroomStage ?: return
-        val carMeshes = carMeshesCache[carBuild.spec.id] ?: carMeshesCache.values.first()
+        val carMeshes = getOrBuildCarMesh(carBuild.spec.id)
 
         shader.use()
+        GLES30.glUniform1f(shader.uDamageFactor, 0f)
         GLES30.glUniform3f(shader.uCameraPos, physics.camX, physics.camY, physics.camZ)
         GLES30.glUniform3f(shader.uFogColor, 0.03f, 0.035f, 0.055f)
         GLES30.glUniform1f(shader.uFogDensity, 0.014f)
